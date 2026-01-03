@@ -28,9 +28,8 @@ Frontend single-page application for Doria, an invoice automation platform. This
 - src/
   - pages/        — top-level routes (Login, Dashboard, History, Admin)
   - components/   — reusable UI components
+  - context/      - auth context
   - services/     — API clients, authentication helpers
-  - hooks/        — custom React hooks
-  - styles/       — Tailwind config and global styles
   - assets/       — static files and images
 - public/         — static public assets
 - vite.config.*   — Vite configuration
