@@ -29,14 +29,16 @@ const Dashboard = () => {
             const accounts = res.data.accounts || [];
             const activeAccounts = accounts.filter((a) => a.status !== 'disabled');
             const primary = activeAccounts.find((a) => a.primary) || activeAccounts[0];
+            const primaryExpired = primary?.authState === 'expired';
             setGmailStatus({
-                connected: activeAccounts.length > 0,
+                connected: activeAccounts.length > 0 && !primaryExpired,
                 checking: false,
-                accounts: activeAccounts
+                accounts: activeAccounts,
+                needsReconnect: primaryExpired
             });
             setSelectedAccount(primary ? primary.id || primary._id || '' : '');
         } catch {
-            setGmailStatus({ connected: false, checking: false, accounts: [] });
+            setGmailStatus({ connected: false, checking: false, accounts: [], needsReconnect: false });
             setSelectedAccount('');
         }
     };
@@ -147,7 +149,13 @@ const Dashboard = () => {
                 setUsageInfo(res.data.limitInfo);
             }
         } catch (err) {
-            setError(err.response?.data?.message || err.response?.data?.msg || err.message);
+            const message = err.response?.data?.message || err.response?.data?.msg || err.message;
+            if (err.response?.status === 401 && message?.toLowerCase().includes('reconecta')) {
+                setError('Tu cuenta de Google expiró. Reconecta presionando el botón.');
+                await fetchStatus();
+            } else {
+                setError(message);
+            }
         } finally {
             setIsSearching(false);
         }
@@ -434,7 +442,7 @@ const Dashboard = () => {
                             </div>
                             <div>
                                 <p className="font-bold text-gray-900">
-                                    {gmailStatus.connected ? 'Conectado' : 'Desconectado'}
+                                    {gmailStatus.needsReconnect ? 'Requiere reconexión' : gmailStatus.connected ? 'Conectado' : 'Desconectado'}
                                 </p>
                                 <p className="text-xs text-gray-500">
                                     {gmailStatus.accounts?.length
@@ -469,9 +477,18 @@ const Dashboard = () => {
                                     <path fill="#34A853" d="M24 46.5c5.94 0 10.93-1.95 14.58-5.3l-7.36-5.7c-2.06 1.39-4.69 2.2-7.22 2.2-6.75 0-12.46-4.56-14.5-10.87l-6.29 5.63C7.09 39.27 14.82 46.5 24 46.5z"/>
                                     <path fill="none" d="M2 2h44v44H2z"/>
                                 </svg>
-                                {gmailStatus.connected ? 'Gestionar cuentas' : 'Conectar Gmail'}
+                                {gmailStatus.needsReconnect
+                                    ? 'Reconectar Gmail'
+                                    : gmailStatus.connected
+                                    ? 'Gestionar cuentas'
+                                    : 'Conectar Gmail'}
                             </span>
                         </button>
+                        {gmailStatus.needsReconnect && (
+                            <p className="mt-2 text-xs text-amber-700">
+                                Tu cuenta de Google expiró. Reconecta presionando el botón.
+                            </p>
+                        )}
                     </div>
 
                     {/* Estado de cuenta (uso y último paquete) */}

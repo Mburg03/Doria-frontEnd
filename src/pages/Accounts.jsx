@@ -37,8 +37,8 @@ const Accounts = () => {
     loadData();
   }, []);
 
-  const handleReplace = async (id) => {
-    if (!window.confirm('¿Reemplazar esta cuenta por otra? Se consumirá un cambio disponible.')) return;
+  const handleReplace = async (id, isReauth = false) => {
+    if (!window.confirm(isReauth ? '¿Reautenticar esta cuenta? No consumirá cambios.' : '¿Reemplazar esta cuenta por otra? Se consumirá un cambio disponible.')) return;
     setReplacingId(id);
     setError(null);
     try {
@@ -142,7 +142,11 @@ const Accounts = () => {
                 <div className="col-span-2">
                   <div className="flex items-center gap-2">
                     <p className="font-semibold text-gray-900">{acc.email}</p>
-                    {acc.status === 'disabled' ? (
+                    {acc.authState === 'expired' ? (
+                      <span className="text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-100">
+                        Requiere reconexión
+                      </span>
+                    ) : acc.status === 'disabled' ? (
                       <span className="text-xs px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-100">
                         Deshabilitada
                       </span>
@@ -174,17 +178,28 @@ const Accounts = () => {
                   <p className="font-semibold">{acc.stats?.totalPdf ?? 0}</p>
                 </div>
                 <div className="text-right flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => handleReplace(acc.id || acc._id)}
-                    disabled={!!replacingId || acc.status === 'disabled'}
-                    className="p-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                    title="Reemplazar cuenta"
-                  >
-                    <RefreshCcw size={16} className={replacingId === (acc.id || acc._id) ? 'animate-spin' : ''} />
-                  </button>
+                  {acc.authState === 'expired' ? (
+                    <button
+                      onClick={() => handleReplace(acc.id || acc._id, true)}
+                      disabled={!!replacingId || acc.status === 'disabled'}
+                      className="p-2 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                      title="Reautenticar cuenta"
+                    >
+                      <RefreshCcw size={16} className={replacingId === (acc.id || acc._id) ? 'animate-spin' : ''} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleReplace(acc.id || acc._id)}
+                      disabled={!!replacingId || acc.status === 'disabled'}
+                      className="p-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      title="Reemplazar cuenta"
+                    >
+                      <RefreshCcw size={16} className={replacingId === (acc.id || acc._id) ? 'animate-spin' : ''} />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleSetPrimary(acc.id || acc._id)}
-                    disabled={!!activatingId || acc.status === 'disabled' || acc.primary}
+                    disabled={!!activatingId || acc.status === 'disabled' || acc.primary || acc.authState === 'expired'}
                     className="p-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                     title="Usar esta cuenta"
                   >
