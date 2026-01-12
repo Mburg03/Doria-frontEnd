@@ -8,6 +8,7 @@ const Settings = () => {
   const [customKeywords, setCustomKeywords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [newKeyword, setNewKeyword] = useState('');
 
   const loadKeywords = async () => {
     setLoading(true);
@@ -33,6 +34,22 @@ const Settings = () => {
       setCustomKeywords(res.data.custom || []);
     } catch {
       setError('No se pudo eliminar la keyword.');
+    }
+  };
+
+  const handleAdd = async () => {
+    const trimmed = newKeyword.trim();
+    const pattern = /^[\p{L}\p{N}\s._-]{2,50}$/u;
+    if (!pattern.test(trimmed)) {
+      setError('Keyword inválida. Usa letras, números y guiones/puntos (2-50 chars).');
+      return;
+    }
+    try {
+      const res = await api.post('/keywords', { keyword: trimmed });
+      setCustomKeywords(res.data.custom || []);
+      setNewKeyword('');
+    } catch {
+      setError('No se pudo agregar la keyword.');
     }
   };
 
@@ -80,7 +97,33 @@ const Settings = () => {
 
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Tus keywords</h2>
-          <p className="text-sm text-gray-500 mb-4">Elimina las que ya no necesites.</p>
+          <p className="text-sm text-gray-500 mb-4">Agrega o elimina las que ya no necesites.</p>
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
+            <input
+              type="text"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              placeholder="Escribe una keyword..."
+              value={newKeyword}
+              onChange={(e) => {
+                const val = e.target.value;
+                const allowed = val.replace(/[^\p{L}\p{N}\s._-]/gu, '');
+                setNewKeyword(allowed);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAdd();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleAdd}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            >
+              Agregar
+            </button>
+          </div>
           {loading ? (
             <p className="text-sm text-gray-500">Cargando...</p>
           ) : customKeywords.length === 0 ? (

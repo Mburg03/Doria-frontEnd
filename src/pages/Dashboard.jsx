@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
-import { Mail, RefreshCw, CheckCircle, Download, X, Calendar, Search, ShieldAlert } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Download, Calendar, Search, ShieldAlert } from 'lucide-react';
 import api from '../services/api';
 
 const Dashboard = () => {
@@ -13,15 +13,14 @@ const Dashboard = () => {
 
     // Search State
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
-    const [baseKeywords, setBaseKeywords] = useState([]);
     const [customKeywords, setCustomKeywords] = useState([]);
-    const [currentKeyword, setCurrentKeyword] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState(null);
     const [latestPackage, setLatestPackage] = useState(null);
     const [error, setError] = useState(null);
     const [usageInfo, setUsageInfo] = useState(null); // {limit, remaining, usedAfter, plan}
     const [includeSpam, setIncludeSpam] = useState(false);
+    const [exhaustiveSearch, setExhaustiveSearch] = useState(null);
 
     const fetchStatus = async () => {
         try {
@@ -63,12 +62,18 @@ const Dashboard = () => {
         fetchUsage();
     }, []);
 
+    useEffect(() => {
+        if (exhaustiveSearch !== null) return;
+        if (!usageInfo?.plan) return;
+        const defaultExhaustive = ['negocio', 'pro'].includes(usageInfo.plan);
+        setExhaustiveSearch(defaultExhaustive);
+    }, [usageInfo, exhaustiveSearch]);
+
     // Load keywords
     useEffect(() => {
         const loadKeywords = async () => {
             try {
                 const res = await api.get('/keywords');
-                setBaseKeywords(res.data.base || []);
                 setCustomKeywords(res.data.custom || []);
             } catch (err) {
                 setError('No se pudieron cargar las keywords.');
@@ -90,33 +95,8 @@ const Dashboard = () => {
         loadLatest();
     }, []);
 
-    const handleAddKeyword = async (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const trimmed = currentKeyword.trim();
-            const pattern = /^[\p{L}\p{N}\s._-]{2,50}$/u;
-            if (!pattern.test(trimmed)) {
-                setError('Keyword inválida. Usa letras, números y guiones/puntos (2-50 chars).');
-                return;
-            }
-            try {
-                const res = await api.post('/keywords', { keyword: trimmed });
-                setCustomKeywords(res.data.custom || []);
-                setCurrentKeyword('');
-            } catch (err) {
-                setError(err.response?.data?.msg || 'No se pudo agregar la keyword.');
-            }
-        }
-    };
-
-    const removeKeyword = async (kw) => {
-        try {
-            const res = await api.delete(`/keywords/${encodeURIComponent(kw)}`);
-            setCustomKeywords(res.data.custom || []);
-        } catch (err) {
-            setError(err.response?.data?.msg || 'No se pudo eliminar la keyword.');
-        }
-    };
+    const defaultExhaustive = ['negocio', 'pro'].includes(usageInfo?.plan || '');
+    const effectiveExhaustive = exhaustiveSearch ?? defaultExhaustive;
 
     const handleSearch = async () => {
         setIsSearching(true);
@@ -142,7 +122,8 @@ const Dashboard = () => {
                 startDate: dateRange.startDate.replaceAll('-', '/'),
                 endDate: dateRange.endDate.replaceAll('-', '/'),
                 accountId: selectedAccount || undefined,
-                includeSpam
+                includeSpam,
+                exhaustive: effectiveExhaustive
             });
             setResults(res.data);
             if (res.data?.limitInfo) {
@@ -161,10 +142,10 @@ const Dashboard = () => {
         }
     };
 
-    const handleDownloadPackage = async () => {
-        if (!results?.packageId) return;
+    const handleDownloadPackage = async (packageId) => {
+        if (!packageId) return;
         try {
-            const res = await api.get(`/packages/download/${results.packageId}?urlOnly=1`);
+            const res = await api.get(`/packages/download/${packageId}?urlOnly=1`);
             if (res.data?.url) {
                 window.location.href = res.data.url;
             } else {
@@ -288,39 +269,7 @@ const Dashboard = () => {
                     {/* Selector de cuenta Gmail (si hay varias) */}
                     {/* Selector removido: usaremos siempre la cuenta primaria */}
 
-                    {/* Keywords */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Keywords adicionales</label>
-                        <div className="border border-gray-300 rounded-lg p-2 flex flex-wrap gap-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 bg-white">
-                                    <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-sm select-none border border-gray-200">
-                                        DTE
-                                    </span>
-                                    <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-sm select-none border border-gray-200">
-                                        Factura
-                                    </span>
-
-                                    {customKeywords.map((kw, idx) => (
-                                        <span key={idx} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-sm flex items-center gap-1 border border-indigo-100 animate-in fade-in zoom-in duration-200">
-                                            {kw}
-                                            <button onClick={() => removeKeyword(kw)} className="hover:text-indigo-900"><X size={14} /></button>
-                                        </span>
-                                    ))}
-
-                                    <input
-                                        type="text"
-                                        className="flex-1 outline-none text-sm min-w-[120px] py-1"
-                                        placeholder="Escribe y presiona Enter..."
-                                        value={currentKeyword}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            const allowed = val.replace(/[^\p{L}\p{N}\s._-]/gu, '');
-                                            setCurrentKeyword(allowed);
-                                        }}
-                                        onKeyDown={handleAddKeyword}
-                                    />
-                                </div>
-                            </div>
-
+                            {/* Keywords removidas del dashboard (se gestionan en Ajustes) */}
                             {/* Action Button */}
                             <div className="flex items-center gap-2 text-sm text-gray-600">
                                 <input
@@ -331,6 +280,18 @@ const Dashboard = () => {
                                     className="h-4 w-4 text-blue-600 border-gray-300 rounded"
                                 />
                                 <label htmlFor="includeSpam">Incluir correos en Spam</label>
+                            </div>
+                            <div className="flex items-start gap-2 text-sm text-gray-600">
+                                <input
+                                    id="exhaustiveSearch"
+                                    type="checkbox"
+                                    checked={effectiveExhaustive}
+                                    onChange={(e) => setExhaustiveSearch(e.target.checked)}
+                                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                                />
+                                <label htmlFor="exhaustiveSearch">
+                                    Búsqueda exhaustiva (más lenta, encuentra correos sin keywords)
+                                </label>
                             </div>
 
                             <button
@@ -396,32 +357,62 @@ const Dashboard = () => {
                                             {results.summary?.jsonCount ?? results.jsonCount ?? 0}
                                         </span>
                                     </p>
-                                </div>
-                                <button
-                                    onClick={handleDownloadPackage}
-                                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
-                                >
-                                    <Download size={16} />
-                                    Descargar ZIP
-                                </button>
-                            </div>
-
-                            {/* Simple File Preview List (Optional for MVP, maybe just summary is enough? Let's show empty state or icon) */}
-                            <div className="p-8 text-center space-y-2">
-                                <div className="inline-flex justify-center items-center w-16 h-16 bg-green-50 text-green-600 rounded-full mb-4">
-                                    <CheckCircle size={32} />
-                                </div>
-                                <h4 className="text-gray-900 font-medium">Listo para descargar</h4>
-                                <p className="text-gray-500 text-sm">Tu paquete se generó correctamente.</p>
-                                <div className="text-sm text-gray-600">
-                                    <p>
-                                        Correos: <span className="font-semibold">{results.summary?.messagesFound ?? results.messagesFound ?? 0}</span> · Archivos: <span className="font-semibold">{results.summary?.filesSaved ?? results.filesSaved ?? 0}</span>
-                                    </p>
-                                    {results.sizeBytes && (
-                                        <p>Tamaño ZIP: {(results.sizeBytes / (1024 * 1024)).toFixed(2)} MB</p>
+                                    {results.searchMode === 'exhaustive' && (
+                                        <p className="mt-1 text-xs text-blue-700">
+                                            Búsqueda exhaustiva activada.
+                                        </p>
+                                    )}
+                                    {results.limitInfo?.limitReached && results.limitInfo?.message && (
+                                        <p className="mt-1 text-xs text-amber-700">{results.limitInfo.message}</p>
                                     )}
                                 </div>
+                                {results.packages?.length === 1 && (
+                                    <button
+                                        onClick={() => handleDownloadPackage(results.packages[0].id)}
+                                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                                    >
+                                        <Download size={16} />
+                                        Descargar ZIP
+                                    </button>
+                                )}
                             </div>
+
+                            {results.packages?.length > 1 ? (
+                                <div className="divide-y divide-gray-100">
+                                    {results.packages.map((pkg) => (
+                                        <div key={pkg.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                            <div className="text-sm text-gray-700">
+                                                <p className="font-semibold text-gray-900">
+                                                    Rango: {pkg.startDate} a {pkg.endDate}
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    Cuenta: {pkg.accountEmail || '—'} · PDFs: {pkg.pdfCount || 0} · JSON: {pkg.jsonCount || 0}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => handleDownloadPackage(pkg.id)}
+                                                className="px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                                            >
+                                                <Download size={14} />
+                                                Descargar ZIP
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-8 text-center space-y-2">
+                                    <div className="inline-flex justify-center items-center w-16 h-16 bg-green-50 text-green-600 rounded-full mb-4">
+                                        <CheckCircle size={32} />
+                                    </div>
+                                    <h4 className="text-gray-900 font-medium">Listo para descargar</h4>
+                                    <p className="text-gray-500 text-sm">Tu paquete se generó correctamente.</p>
+                                    <div className="text-sm text-gray-600">
+                                        <p>
+                                            Correos: <span className="font-semibold">{results.summary?.messagesFound ?? results.messagesFound ?? 0}</span> · Archivos: <span className="font-semibold">{results.summary?.filesSaved ?? results.filesSaved ?? 0}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 

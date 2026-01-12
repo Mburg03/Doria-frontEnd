@@ -13,6 +13,7 @@ const AdminUsers = () => {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [resettingUsage, setResettingUsage] = useState(false);
 
   if (user?.role !== 'admin') {
     return (
@@ -102,6 +103,25 @@ const AdminUsers = () => {
       }
     } catch {
       setError('No se pudo actualizar el plan.');
+    }
+  };
+
+  const handleResetUsage = async (id) => {
+    if (!window.confirm('¿Reiniciar el uso mensual de DTE de este usuario?')) return;
+    setResettingUsage(true);
+    try {
+      const res = await api.patch(`/admin/users/${id}/usage/reset`);
+      const usage = res.data?.usage || { dteCount: 0 };
+      setUsers((prev) =>
+        prev.map((u) => (u._id === id ? { ...u, usage: { ...u.usage, dteCount: usage.dteCount } } : u))
+      );
+      if (selected?.user?._id === id) {
+        setSelected((prev) => ({ ...prev, usage: { ...(prev?.usage || {}), dteCount: usage.dteCount } }));
+      }
+    } catch {
+      setError('No se pudo reiniciar el uso mensual.');
+    } finally {
+      setResettingUsage(false);
     }
   };
 
@@ -215,6 +235,15 @@ const AdminUsers = () => {
               <p>Plan: {selected.user.plan} ({selected.user.planStatus || 'active'})</p>
               <p>Paquetes: {selected.packages?.length ?? 0}</p>
               <p>Uso mensual: {selected.usage?.dteCount ?? 0} DTEs</p>
+              <button
+                type="button"
+                onClick={() => handleResetUsage(selected.user._id)}
+                disabled={resettingUsage}
+                className="mt-2 inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-60"
+              >
+                {resettingUsage ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+                Reiniciar uso mensual
+              </button>
               <p>Cuentas Gmail: {selected.gmailCount ?? 0}</p>
               {selected.accounts?.length > 0 && (
                 <div className="mt-2">

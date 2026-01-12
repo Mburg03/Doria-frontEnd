@@ -53,18 +53,21 @@ const Register = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50">
-            {/* Left: Form Side */}
-            <div className="flex flex-col justify-center w-full p-8 md:w-1/2 lg:w-5/12 xl:w-4/12 md:p-12 lg:p-16">
-                <div className="w-full max-w-sm mx-auto">
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900 mb-2">
-                        Crea tu cuenta <span role="img" aria-label="party">🎉</span>
-                    </h1>
-                    <p className="text-gray-500 mb-8">
-                        Únete a Factura Automate y simplifica tu vida.
-                    </p>
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-12">
+            <div className="w-full max-w-lg bg-white border border-gray-200 rounded-2xl shadow-sm">
+                <div className="flex items-center justify-center gap-3 pt-8 pb-6 border-b border-gray-100">
+                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M13 2L3 14h9l-1 8 9-12h-9l1-8z" />
+                        </svg>
+                    </div>
+                    <span className="text-2xl font-semibold text-gray-900">Doria</span>
+                </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="px-10 py-9">
+                    <h1 className="text-2xl font-semibold text-gray-900 text-center">Crear cuenta</h1>
+
+                    <form onSubmit={handleSubmit} className="mt-8 space-y-5">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
                             <input
@@ -151,32 +154,25 @@ const Register = () => {
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="w-full bg-[#1e293b] text-white py-3 rounded-lg font-semibold hover:bg-[#0f172a] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
+                            className="w-full bg-[#1e293b] text-white py-3 rounded-full font-semibold hover:bg-[#0f172a] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center"
                         >
                             {isSubmitting ? <Loader2 className="animate-spin" /> : 'Registrarse'}
                         </button>
                     </form>
 
-                    <div className="mt-8 text-center text-sm text-gray-500">
-                        ¿Ya tienes una cuenta?{' '}
-                        <Link to="/login" className="text-blue-600 font-semibold hover:underline">
+                    <div className="mt-10 pt-6 border-t border-gray-100 text-center">
+                        <p className="text-sm text-gray-500 mb-4">¿Ya tienes una cuenta?</p>
+                        <Link
+                            to="/login"
+                            className="inline-flex items-center justify-center w-full py-2.5 rounded-full border border-gray-300 text-gray-700 font-semibold hover:border-gray-400 hover:text-gray-900 transition-colors"
+                        >
                             Iniciar sesión
                         </Link>
                     </div>
-                </div>
-            </div>
 
-            {/* Right: Image Side - Same as Login for consistency */}
-            <div className="hidden md:block w-1/2 lg:w-7/12 xl:w-8/12 bg-black relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black opacity-90 z-10"></div>
-                <img
-                    src="https://images.unsplash.com/photo-1542259649-41a396264e1f?q=80&w=2574&auto=format&fit=crop"
-                    alt="Aesthetic Background"
-                    className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-60"
-                />
-                <div className="absolute bottom-10 left-10 z-20 text-white max-w-md">
-                    <h2 className="text-3xl font-bold mb-4">Start organizing today.</h2>
-                    <p className="text-sm opacity-70">Focus on your business, we handle the documents.</p>
+                    <div className="mt-8 text-center text-xs text-gray-400 uppercase tracking-widest">
+                        © 2025 Doria
+                    </div>
                 </div>
             </div>
         </div>
