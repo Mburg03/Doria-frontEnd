@@ -8,6 +8,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AdminUsers from './pages/AdminUsers';
 import Accounts from './pages/Accounts';
+import ProviderSearch from './pages/ProviderSearch';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -65,6 +66,14 @@ function App() {
         element={
           <ProtectedRoute>
             <Accounts />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/provider-search"
+        element={
+          <ProtectedRoute>
+            <ProviderSearch />
           </ProtectedRoute>
         }
       />

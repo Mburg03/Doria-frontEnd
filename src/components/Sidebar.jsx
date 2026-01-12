@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Settings, Package, LogOut, Loader2, X, Mail } from 'lucide-react';
+import { LayoutDashboard, Settings, Package, LogOut, Loader2, X, Mail, Search } from 'lucide-react';
 import clsx from 'clsx';
 
 const Sidebar = ({ mobileOpen = false, onClose = () => {} }) => {
@@ -9,6 +9,7 @@ const Sidebar = ({ mobileOpen = false, onClose = () => {} }) => {
 
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
+        { name: 'Búsqueda específica', icon: Search, path: '/provider-search' },
         { name: 'Mis paquetes', icon: Package, path: '/packages' },
         { name: 'Gestionar cuentas', icon: Mail, path: '/accounts' }
     ];
