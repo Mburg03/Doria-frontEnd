@@ -80,6 +80,10 @@ const ProviderSearch = () => {
     }
   };
 
+  const clearRecent = () => {
+    persistRecent([]);
+  };
+
   const addProvidersFromInput = () => {
     const raw = providerInput.split(',');
     const cleaned = raw.map((email) => email.trim().toLowerCase()).filter(Boolean);
@@ -231,7 +235,8 @@ const ProviderSearch = () => {
         <p className="text-gray-500">Filtra DTEs por proveedores y rango de fechas.</p>
       </div>
 
-      <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+        <div className="space-y-6 lg:col-span-3">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -266,23 +271,6 @@ const ProviderSearch = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
                 />
                 <p className="mt-1 text-xs text-gray-500">Presiona Enter o coma para agregar. Máximo 10 proveedores.</p>
-                {recentProviders.length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recientes</p>
-                    <div className="flex flex-wrap gap-2">
-                      {recentProviders.map((email) => (
-                        <button
-                          key={email}
-                          type="button"
-                          onClick={() => handleUseRecent(email)}
-                          className="px-2 py-1 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
-                        >
-                          {email}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -339,8 +327,6 @@ const ProviderSearch = () => {
               {error}
             </div>
           )}
-
-       
 
           {results && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
@@ -410,6 +396,37 @@ const ProviderSearch = () => {
               )}
             </div>
           )}
+        </div>
+
+        <div className="space-y-6 lg:col-span-2">
+          {recentProviders.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-fit lg:sticky lg:top-6">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-sm font-semibold text-gray-900">Proveedores recientes</h3>
+                <button
+                  type="button"
+                  onClick={clearRecent}
+                  className="text-xs font-semibold px-2.5 py-1 rounded-full border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition"
+                >
+                  Limpiar
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4">Selecciona un proveedor usado recientemente para la búsqueda.</p>
+              <div className="flex flex-wrap gap-2">
+                {recentProviders.map((email) => (
+                  <button
+                    key={email}
+                    type="button"
+                    onClick={() => handleUseRecent(email)}
+                    className="px-2 py-1 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  >
+                    {email}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       
     </Layout>

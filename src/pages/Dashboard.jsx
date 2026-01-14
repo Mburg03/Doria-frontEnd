@@ -13,14 +13,11 @@ const Dashboard = () => {
 
     // Search State
     const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
-    const [customKeywords, setCustomKeywords] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState(null);
-    const [latestPackage, setLatestPackage] = useState(null);
     const [error, setError] = useState(null);
     const [usageInfo, setUsageInfo] = useState(null); // {limit, remaining, usedAfter, plan}
     const [includeSpam, setIncludeSpam] = useState(false);
-    const [exhaustiveSearch, setExhaustiveSearch] = useState(null);
 
     const fetchStatus = async () => {
         try {
@@ -62,41 +59,8 @@ const Dashboard = () => {
         fetchUsage();
     }, []);
 
-    useEffect(() => {
-        if (exhaustiveSearch !== null) return;
-        if (!usageInfo?.plan) return;
-        const defaultExhaustive = ['negocio', 'pro'].includes(usageInfo.plan);
-        setExhaustiveSearch(defaultExhaustive);
-    }, [usageInfo, exhaustiveSearch]);
-
-    // Load keywords
-    useEffect(() => {
-        const loadKeywords = async () => {
-            try {
-                const res = await api.get('/keywords');
-                setCustomKeywords(res.data.custom || []);
-            } catch (err) {
-                setError('No se pudieron cargar las keywords.');
-            }
-        };
-        loadKeywords();
-    }, []);
-
     // Load latest package
-    useEffect(() => {
-        const loadLatest = async () => {
-            try {
-                const res = await api.get('/packages/latest');
-                setLatestPackage(res.data);
-            } catch (err) {
-                // silencioso
-            }
-        };
-        loadLatest();
-    }, []);
 
-    const defaultExhaustive = ['negocio', 'pro'].includes(usageInfo?.plan || '');
-    const effectiveExhaustive = exhaustiveSearch ?? defaultExhaustive;
 
     const handleSearch = async () => {
         setIsSearching(true);
@@ -123,7 +87,7 @@ const Dashboard = () => {
                 endDate: dateRange.endDate.replaceAll('-', '/'),
                 accountId: selectedAccount || undefined,
                 includeSpam,
-                exhaustive: effectiveExhaustive
+                exhaustive: true
             });
             setResults(res.data);
             if (res.data?.limitInfo) {
@@ -230,9 +194,7 @@ const Dashboard = () => {
                                 <Search size={20} className="text-blue-600" />
                                 Buscar facturas
                             </h2>
-                            <span className="text-xs font-semibold px-2 py-1 bg-blue-50 text-blue-700 rounded border border-blue-100">
-                                KEYWORDS ACTIVAS
-                            </span>
+                      
                         </div>
 
                         <div className="space-y-6">
@@ -268,8 +230,6 @@ const Dashboard = () => {
 
                     {/* Selector de cuenta Gmail (si hay varias) */}
                     {/* Selector removido: usaremos siempre la cuenta primaria */}
-
-                            {/* Keywords removidas del dashboard (se gestionan en Ajustes) */}
                             {/* Action Button */}
                             <div className="flex items-center gap-2 text-sm text-gray-600">
                                 <input
@@ -281,19 +241,6 @@ const Dashboard = () => {
                                 />
                                 <label htmlFor="includeSpam">Incluir correos en Spam</label>
                             </div>
-                            <div className="flex items-start gap-2 text-sm text-gray-600">
-                                <input
-                                    id="exhaustiveSearch"
-                                    type="checkbox"
-                                    checked={effectiveExhaustive}
-                                    onChange={(e) => setExhaustiveSearch(e.target.checked)}
-                                    className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded"
-                                />
-                                <label htmlFor="exhaustiveSearch">
-                                    Búsqueda exhaustiva (más lenta, encuentra correos sin keywords)
-                                </label>
-                            </div>
-
                             <button
                                 onClick={handleSearch}
                                 disabled={
@@ -326,11 +273,6 @@ const Dashboard = () => {
 
                     <div className="bg-blue-50 text-blue-800 p-3 rounded-lg border border-blue-100 text-sm">
                         <p>Máximo 31 días por búsqueda para asegurar la descarga.</p>
-                        {usageInfo?.zipLimitBytes ? (
-                            <p className="mt-1">
-                                Límite por paquete: {(usageInfo.zipLimitBytes / (1024 * 1024)).toFixed(0)} MB.
-                            </p>
-                        ) : null}
                     </div>
 
 

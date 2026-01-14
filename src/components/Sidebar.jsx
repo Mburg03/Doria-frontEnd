@@ -9,7 +9,7 @@ const Sidebar = ({ mobileOpen = false, onClose = () => {} }) => {
 
     const navItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
-        { name: 'Búsqueda específica', icon: Search, path: '/provider-search' },
+        { name: 'Búsqueda por proveedor', icon: Search, path: '/provider-search' },
         { name: 'Mis paquetes', icon: Package, path: '/packages' },
         { name: 'Gestionar cuentas', icon: Mail, path: '/accounts' }
     ];
