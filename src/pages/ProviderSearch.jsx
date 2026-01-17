@@ -1,23 +1,27 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Calendar, CheckCircle, Download, Search, X } from 'lucide-react';
+import { getDefaultRange } from '../utils/dateRange';
+import { useGmailAuth } from '../hooks/useGmailAuth';
 
 const ProviderSearch = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [gmailStatus, setGmailStatus] = useState({ connected: false, checking: true, accounts: [] });
+  const {
+    gmailStatus,
+    activeAccount,
+    error: gmailError,
+    refreshStatus
+  } = useGmailAuth();
   const [selectedAccount, setSelectedAccount] = useState('');
-  const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+  const [dateRange, setDateRange] = useState(getDefaultRange());
   const [providerInput, setProviderInput] = useState('');
   const [providerEmails, setProviderEmails] = useState([]);
   const [recentProviders, setRecentProviders] = useState([]);
   const [includeSpam, setIncludeSpam] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState(null);
-  const [usageInfo, setUsageInfo] = useState(null);
   const [error, setError] = useState(null);
 
   const recentKey = user?._id ? `doria.providers.recent.${user._id}` : 'doria.providers.recent';
@@ -25,40 +29,8 @@ const ProviderSearch = () => {
   const maxProviders = 10;
 
   useEffect(() => {
-    const fetchUsage = async () => {
-      try {
-        const res = await api.get('/packages/usage');
-        setUsageInfo(res.data);
-      } catch {
-        // ignore
-      }
-    };
-    fetchUsage();
-  }, []);
-
-  const fetchStatus = async () => {
-    try {
-      const res = await api.get('/gmail/status');
-      const accounts = res.data.accounts || [];
-      const activeAccounts = accounts.filter((a) => a.status !== 'disabled');
-      const primary = activeAccounts.find((a) => a.primary) || activeAccounts[0];
-      const primaryExpired = primary?.authState === 'expired';
-      setGmailStatus({
-        connected: activeAccounts.length > 0 && !primaryExpired,
-        checking: false,
-        accounts: activeAccounts,
-        needsReconnect: primaryExpired
-      });
-      setSelectedAccount(primary ? primary.id || primary._id || '' : '');
-    } catch {
-      setGmailStatus({ connected: false, checking: false, accounts: [], needsReconnect: false });
-      setSelectedAccount('');
-    }
-  };
-
-  useEffect(() => {
-    fetchStatus();
-  }, []);
+    setSelectedAccount(activeAccount?.id || activeAccount?._id || '');
+  }, [activeAccount]);
 
   useEffect(() => {
     try {
@@ -174,13 +146,10 @@ const ProviderSearch = () => {
         const nextRecent = Array.from(new Set([...providerEmails, ...recentProviders])).slice(0, maxProviders);
         persistRecent(nextRecent);
       }
-      if (res.data?.limitInfo) {
-        setUsageInfo((prev) => ({ ...prev, ...res.data.limitInfo }));
-      }
     } catch (err) {
       const message = err.response?.data?.message || err.response?.data?.msg || err.message;
       setError(message);
-      await fetchStatus();
+      await refreshStatus();
     } finally {
       setIsSearching(false);
     }
@@ -206,20 +175,7 @@ const ProviderSearch = () => {
     }
   };
 
-  const handleConnectGmail = async () => {
-    if (gmailStatus.connected) {
-      navigate('/accounts');
-      return;
-    }
-    try {
-      const res = await api.get('/gmail/auth');
-      if (res.data?.url) {
-        window.location.href = res.data.url;
-      }
-    } catch {
-      setError('No se pudo iniciar la conexión con Gmail. Revisa tu sesión.');
-    }
-  };
+  const displayError = error || gmailError;
 
   if (user?.role === 'viewer') {
     return (
@@ -328,9 +284,9 @@ const ProviderSearch = () => {
             </div>
           </div>
 
-          {error && (
+          {displayError && (
             <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200 text-sm">
-              {error}
+              {displayError}
             </div>
           )}
 

@@ -1,38 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import Layout from '../components/Layout';
-import api from '../services/api';
 import {
-  Area,
-  AreaChart,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from 'recharts';
-import { TrendingUp, Calendar, X, Search } from 'lucide-react';
-
-const formatCurrency = (value = 0) =>
-  new Intl.NumberFormat('es-SV', { style: 'currency', currency: 'USD' }).format(value || 0);
-const formatNumber = (value = 0) => new Intl.NumberFormat('es-SV').format(value || 0);
-
-const formatShortDate = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString('es-SV', { day: '2-digit', month: '2-digit' });
-};
-
-const getDefaultRange = () => {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: now.toISOString().slice(0, 10)
-  };
-};
+  fetchAnnulled,
+  fetchInsightsStats,
+  fetchProducts,
+  fetchProviders
+} from '../services/insightsService';
+import { formatCurrency, formatNumber } from '../utils/formatters';
+import { getDefaultRange } from '../utils/dateRange';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { Calendar } from 'lucide-react';
+import SearchInput from '../components/SearchInput';
+import AnalyticsSummaryGrid from '../components/insights/AnalyticsSummaryGrid';
+import DailySpendChart from '../components/insights/DailySpendChart';
+import ProviderSidebar from '../components/modals/ProviderSidebar';
+import ProductSidebar from '../components/modals/ProductSidebar';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 
 const COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
@@ -49,29 +32,6 @@ const ProviderTooltip = ({ active, payload }) => {
   );
 };
 
-const TableSearch = ({ value, onChange, placeholder }) => (
-  <div className="relative w-full max-w-sm">
-    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-    <input
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-8 text-sm text-gray-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-      aria-label={placeholder}
-    />
-    {value ? (
-      <button
-        type="button"
-        onClick={() => onChange('')}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600"
-        aria-label="Limpiar búsqueda"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    ) : null}
-  </div>
-);
-
 const Insights = () => {
   const [activeTab, setActiveTab] = useState('resumen');
   const [dateRange, setDateRange] = useState(getDefaultRange());
@@ -87,62 +47,60 @@ const Insights = () => {
   const [annulledLoading, setAnnulledLoading] = useState(false);
   const [providerQuery, setProviderQuery] = useState('');
   const [productQuery, setProductQuery] = useState('');
+  const debouncedProviderQuery = useDebouncedValue(providerQuery);
+  const debouncedProductQuery = useDebouncedValue(productQuery);
 
   const [selectedProvider, setSelectedProvider] = useState(null);
-  const [providerDetails, setProviderDetails] = useState([]);
-  const [providerDetailsLoading, setProviderDetailsLoading] = useState(false);
-  const [providerProducts, setProviderProducts] = useState([]);
-  const [providerProductsLoading, setProviderProductsLoading] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [productSummary, setProductSummary] = useState(null);
-  const [productHistory, setProductHistory] = useState([]);
-  const [productLoading, setProductLoading] = useState(false);
 
-  const fetchStats = async (startDate, endDate) => {
+  const loadStats = async (startDate, endDate) => {
     setStatsLoading(true);
     try {
-      const res = await api.get('/insights/stats', { params: { startDate, endDate } });
-      setStats(res.data);
-    } catch {
-      setError('No se pudo cargar el resumen de insights.');
+      const data = await fetchInsightsStats({ startDate, endDate });
+      setStats(data);
+    } catch (err) {
+      setError(err?.message || 'No se pudo cargar el resumen de insights.');
     } finally {
       setStatsLoading(false);
     }
   };
 
-  const fetchProviders = async (startDate, endDate) => {
+  const loadProviders = async (startDate, endDate) => {
     setProvidersLoading(true);
     try {
-      const res = await api.get('/insights/providers', { params: { startDate, endDate } });
-      setProviders(res.data.items || []);
-    } catch {
-      setError('No se pudo cargar el listado de proveedores.');
+      const data = await fetchProviders({ startDate, endDate });
+      setProviders(data.items || []);
+    } catch (err) {
+      setError(err?.message || 'No se pudo cargar el listado de proveedores.');
     } finally {
       setProvidersLoading(false);
     }
   };
 
-  const fetchProducts = async (startDate, endDate) => {
+  const loadProducts = async (startDate, endDate) => {
     setProductsLoading(true);
     try {
-      const res = await api.get('/insights/products', { params: { startDate, endDate } });
-      setProducts(res.data.items || []);
-    } catch {
-      setError('No se pudo cargar el listado de productos.');
+      const data = await fetchProducts({ startDate, endDate });
+      setProducts(data.items || []);
+    } catch (err) {
+      setError(err?.message || 'No se pudo cargar el listado de productos.');
     } finally {
       setProductsLoading(false);
     }
   };
 
-  const fetchAnnulled = async (startDate, endDate, page) => {
+  const loadAnnulled = async (startDate, endDate, page) => {
     setAnnulledLoading(true);
     try {
-      const res = await api.get('/insights/annulled', {
-        params: { startDate, endDate, page, limit: 20 }
+      const data = await fetchAnnulled({
+        startDate,
+        endDate,
+        page,
+        limit: 20
       });
-      setAnnulledData(res.data);
-    } catch {
-      setError('No se pudo cargar el listado de anulados.');
+      setAnnulledData(data);
+    } catch (err) {
+      setError(err?.message || 'No se pudo cargar el listado de anulados.');
     } finally {
       setAnnulledLoading(false);
     }
@@ -152,14 +110,14 @@ const Insights = () => {
     if (!dateRange.startDate || !dateRange.endDate) return;
     setError(null);
     setAnnulledPage(1);
-    fetchStats(dateRange.startDate, dateRange.endDate);
-    fetchProviders(dateRange.startDate, dateRange.endDate);
-    fetchProducts(dateRange.startDate, dateRange.endDate);
+    loadStats(dateRange.startDate, dateRange.endDate);
+    loadProviders(dateRange.startDate, dateRange.endDate);
+    loadProducts(dateRange.startDate, dateRange.endDate);
   }, [dateRange.startDate, dateRange.endDate]);
 
   useEffect(() => {
     if (!dateRange.startDate || !dateRange.endDate) return;
-    fetchAnnulled(dateRange.startDate, dateRange.endDate, annulledPage);
+    loadAnnulled(dateRange.startDate, dateRange.endDate, annulledPage);
   }, [dateRange.startDate, dateRange.endDate, annulledPage]);
 
   const pieData = useMemo(() => {
@@ -171,84 +129,24 @@ const Insights = () => {
   }, [providers]);
 
   const filteredProviders = useMemo(() => {
-    const term = providerQuery.trim().toLowerCase();
+    const term = debouncedProviderQuery.trim().toLowerCase();
     if (!term) return providers;
     return providers.filter((provider) => {
       const nameMatch = provider.nombre?.toLowerCase().includes(term);
       const nitMatch = provider.nit?.toLowerCase().includes(term);
       return nameMatch || nitMatch;
     });
-  }, [providers, providerQuery]);
+  }, [providers, debouncedProviderQuery]);
 
   const filteredProducts = useMemo(() => {
-    const term = productQuery.trim().toLowerCase();
+    const term = debouncedProductQuery.trim().toLowerCase();
     if (!term) return products;
     return products.filter((product) => {
       const descriptionMatch = product.descripcion?.toLowerCase().includes(term);
       const codeMatch = product.codigo?.toLowerCase().includes(term);
       return descriptionMatch || codeMatch;
     });
-  }, [products, productQuery]);
-
-  const handleProviderOpen = async (provider) => {
-    if (!provider) return;
-    setSelectedProduct(null);
-    setSelectedProvider(provider);
-    setProviderDetails([]);
-    setProviderProducts([]);
-    setProviderDetailsLoading(true);
-    setProviderProductsLoading(true);
-    try {
-      const [detailsRes, productsRes] = await Promise.all([
-        api.get('/insights/provider', {
-          params: {
-            startDate: dateRange.startDate,
-            endDate: dateRange.endDate,
-            nit: provider.nit
-          }
-        }),
-        api.get('/insights/products/provider', {
-          params: {
-            startDate: dateRange.startDate,
-            endDate: dateRange.endDate,
-            nit: provider.nit
-          }
-        })
-      ]);
-      setProviderDetails(detailsRes.data.items || []);
-      setProviderProducts(productsRes.data.items || []);
-    } catch {
-      setError('No se pudieron cargar las facturas del proveedor.');
-    } finally {
-      setProviderDetailsLoading(false);
-      setProviderProductsLoading(false);
-    }
-  };
-
-  const handleProductOpen = async (product) => {
-    if (!product) return;
-    setSelectedProvider(null);
-    setSelectedProduct(product);
-    setProductSummary(null);
-    setProductHistory([]);
-    setProductLoading(true);
-    try {
-      const res = await api.get('/insights/product', {
-        params: {
-          startDate: dateRange.startDate,
-          endDate: dateRange.endDate,
-          descripcion: product.descripcion,
-          codigo: product.codigo || ''
-        }
-      });
-      setProductSummary(res.data.product || null);
-      setProductHistory(res.data.history || []);
-    } catch {
-      setError('No se pudo cargar el detalle del producto.');
-    } finally {
-      setProductLoading(false);
-    }
-  };
+  }, [products, debouncedProductQuery]);
 
   const getPriceTrendClass = (minPrice, maxPrice, firstPrice, lastPrice) => {
     if (firstPrice !== null && lastPrice !== null) {
@@ -335,61 +233,10 @@ const Insights = () => {
 
       {activeTab === 'resumen' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">Gasto neto</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {statsLoading ? '—' : formatCurrency(totals.subTotal)}
-              </p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">IVA total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {statsLoading ? '—' : formatCurrency(totals.iva)}
-              </p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">Gasto total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {statsLoading ? '—' : formatCurrency(totals.total)}
-              </p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">DTE</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {statsLoading ? '—' : totals.documents}
-              </p>
-            </div>
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">Anulados</p>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {statsLoading ? '—' : totals.anulados}
-              </p>
-            </div>
-          </div>
+          <AnalyticsSummaryGrid totals={totals} loading={statsLoading} />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <TrendingUp size={18} className="text-blue-600" />
-                  Gasto diario
-                </h3>
-              </div>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={series} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
-                    <XAxis dataKey="date" tickFormatter={formatShortDate} fontSize={12} />
-                    <YAxis tickFormatter={(value) => `$${Math.round(value)}`} fontSize={12} />
-                    <Tooltip
-                      formatter={(value) => formatCurrency(value)}
-                      labelFormatter={(label) => `Fecha: ${label}`}
-                    />
-                    <Area type="monotone" dataKey="total" stroke="#2563EB" fill="#BFDBFE" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+            <DailySpendChart series={series} />
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución por proveedor</h3>
@@ -453,12 +300,12 @@ const Insights = () => {
               <table className="min-w-full table-fixed text-sm">
                 <thead className="text-xs uppercase text-gray-500 border-b">
                   <tr>
-                    <th className="py-2 px-3 text-left w-36">Fecha emisión</th>
-                    <th className="py-2 px-3 text-left w-[360px]">Proveedor</th>
-                    <th className="py-2 px-3 text-right w-28">IVA</th>
-                    <th className="py-2 px-3 text-right w-32">Total</th>
-                    <th className="py-2 px-3 text-left w-36">Fecha anulación</th>
-                    <th className="py-2 px-3 text-left">Motivo</th>
+                    <th className="py-2 px-3 text-center w-36">Fecha emisión</th>
+                    <th className="py-2 px-3 text-center w-[360px]">Proveedor</th>
+                    <th className="py-2 px-3 text-center w-28">IVA</th>
+                    <th className="py-2 px-3 text-center w-32">Total</th>
+                    <th className="py-2 px-3 text-center w-36">Fecha anulación</th>
+                    <th className="py-2 px-3 text-center">Motivo</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -479,12 +326,12 @@ const Insights = () => {
                   {!annulledLoading &&
                     annulledItems.map((item, index) => (
                       <tr key={`${item.numeroControl}-${index}`} className="text-gray-700">
-                        <td className="py-2 px-3 whitespace-nowrap">{item.fechaEmision || '—'}</td>
-                        <td className="py-2 px-3 break-words">{item.emisorNombre || '—'}</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{formatCurrency(item.iva)}</td>
-                        <td className="py-2 px-3 text-right whitespace-nowrap">{formatCurrency(item.total)}</td>
-                        <td className="py-2 px-3 whitespace-nowrap">{item.anulacionFecha || '—'}</td>
-                        <td className="py-2 px-3 break-words">{item.anulacionMotivo || '—'}</td>
+                        <td className="py-2 px-3 text-center whitespace-nowrap">{item.fechaEmision || '—'}</td>
+                        <td className="py-2 px-3 text-center break-words">{item.emisorNombre || '—'}</td>
+                        <td className="py-2 px-3 text-center whitespace-nowrap">{formatCurrency(item.iva)}</td>
+                        <td className="py-2 px-3 text-center whitespace-nowrap">{formatCurrency(item.total)}</td>
+                        <td className="py-2 px-3 text-center whitespace-nowrap">{item.anulacionFecha || '—'}</td>
+                        <td className="py-2 px-3 text-center break-words">{item.anulacionMotivo || '—'}</td>
                       </tr>
                     ))}
                 </tbody>
@@ -534,7 +381,7 @@ const Insights = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Proveedores</h3>
                 <p className="text-sm text-gray-500">Ordenados por gasto total.</p>
               </div>
-              <TableSearch
+              <SearchInput
                 value={providerQuery}
                 onChange={setProviderQuery}
                 placeholder="Buscar proveedor"
@@ -553,7 +400,10 @@ const Insights = () => {
                   <button
                     key={`${provider.nit}-${provider.nombre}`}
                     type="button"
-                    onClick={() => handleProviderOpen(provider)}
+                    onClick={() => {
+                      setSelectedProduct(null);
+                      setSelectedProvider(provider);
+                    }}
                     className="w-full text-left px-6 py-4 hover:bg-gray-50 transition"
                   >
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_140px] md:items-center">
@@ -583,7 +433,7 @@ const Insights = () => {
                 Top productos por monto con variación de precio unitario.
               </p>
             </div>
-            <TableSearch
+            <SearchInput
               value={productQuery}
               onChange={setProductQuery}
               placeholder="Buscar producto"
@@ -612,7 +462,10 @@ const Insights = () => {
                     <tr
                       key={`${product.codigo}-${product.descripcion}`}
                       className="text-gray-700 hover:bg-gray-50 cursor-pointer"
-                      onClick={() => handleProductOpen(product)}
+                      onClick={() => {
+                        setSelectedProvider(null);
+                        setSelectedProduct(product);
+                      }}
                     >
                       <td className="py-3 px-3">
                         <div className="font-medium text-gray-900 truncate">
@@ -646,173 +499,16 @@ const Insights = () => {
         </div>
       )}
 
-      {selectedProvider && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/30" onClick={() => setSelectedProvider(null)}></div>
-          <div className="w-full max-w-md bg-white h-full shadow-xl p-6 overflow-y-auto">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">{selectedProvider.nombre}</h3>
-                <p className="text-xs text-gray-500">NIT: {selectedProvider.nit}</p>
-              </div>
-              <button
-                onClick={() => setSelectedProvider(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 mb-4">
-              <p className="text-xs text-gray-500">Gasto total</p>
-              <p className="text-lg font-semibold text-gray-900">
-                {formatCurrency(selectedProvider.total)}
-              </p>
-              <p className="text-xs text-gray-500 mt-2">
-                {selectedProvider.documents} DTE en el período
-              </p>
-            </div>
-
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Top productos</h4>
-            {providerProductsLoading ? (
-              <p className="text-sm text-gray-500 mb-4">Cargando productos...</p>
-            ) : providerProducts.length === 0 ? (
-              <p className="text-sm text-gray-500 mb-4">Sin productos en el rango.</p>
-            ) : (
-              <div className="space-y-2 mb-4">
-                {providerProducts.slice(0, 5).map((item) => (
-                    <div key={`${item.codigo}-${item.descripcion}`} className="border border-gray-100 rounded-lg p-3">
-                      <p className="text-sm font-medium text-gray-900 truncate max-w-[260px]">
-                        {item.descripcion || 'Sin descripción'}
-                      </p>
-                      <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-                        <span>{formatNumber(item.quantity || 0)} unidades</span>
-                        <span>{formatCurrency(item.totalNet ?? item.totalNet ?? 0)}</span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Facturas en el rango de fecha</h4>
-            {providerDetailsLoading ? (
-              <p className="text-sm text-gray-500">Cargando facturas...</p>
-            ) : providerDetails.length === 0 ? (
-              <p className="text-sm text-gray-500">No se encontraron facturas.</p>
-            ) : (
-              <div className="space-y-3">
-                {providerDetails.map((item) => (
-                  <div key={item.codigoGeneracion} className="border border-gray-100 rounded-lg p-3">
-                    <p className="text-sm font-medium text-gray-900">{item.numeroControl || item.codigoGeneracion}</p>
-                    <p className="text-xs text-gray-500">Fecha: {item.fechaEmision}</p>
-                    <p className="text-xs text-gray-500">Total: {formatCurrency(item.total)}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              disabled
-              className="mt-4 w-full py-2 text-sm font-medium border border-gray-200 rounded-lg text-gray-400"
-            >
-              Ver todos los PDF (próximamente)
-            </button>
-          </div>
-        </div>
-      )}
-
-      {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="flex-1 bg-black/30" onClick={() => setSelectedProduct(null)}></div>
-          <div className="w-full max-w-md bg-white h-full shadow-xl p-6 overflow-y-auto">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {selectedProduct.descripcion || 'Producto'}
-                </h3>
-                {selectedProduct.codigo ? (
-                  <p className="text-xs text-gray-500">Código: {selectedProduct.codigo}</p>
-                ) : null}
-              </div>
-              <button
-                onClick={() => setSelectedProduct(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {productLoading ? (
-              <p className="text-sm text-gray-500">Cargando detalle...</p>
-            ) : (
-              <>
-                <div className="bg-gray-50 border border-gray-100 rounded-lg p-4 mb-4">
-                  <p className="text-xs text-gray-500">Gasto neto (sin IVA)</p>
-                  <p className="text-lg font-semibold text-gray-900">
-                    {formatCurrency(productSummary?.total || 0)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {formatNumber(productSummary?.quantity || 0)} unidades ·{' '}
-                    {productSummary?.documents || 0} documentos
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                  <div className="border border-gray-100 rounded-lg p-3">
-                    <p className="text-xs text-gray-500">IVA estimado</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatCurrency(productSummary?.ivaEstimated || 0)}
-                    </p>
-                  </div>
-                  <div className="border border-gray-100 rounded-lg p-3">
-                    <p className="text-xs text-gray-500">Variación precio</p>
-                    <p
-                      className={`text-sm font-semibold ${getPriceTrendClass(
-                        productSummary?.priceMin || 0,
-                        productSummary?.priceMax || 0,
-                        productSummary?.firstPrice ?? null,
-                        productSummary?.lastPrice ?? null
-                      )}`}
-                    >
-                      {formatCurrency(productSummary?.priceMin || 0)} –{' '}
-                      {formatCurrency(productSummary?.priceMax || 0)}
-                    </p>
-                  </div>
-                  <div className="border border-gray-100 rounded-lg p-3">
-                    <p className="text-xs text-gray-500">Precio unitario</p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatCurrency(productSummary?.lastPrice ?? (productSummary?.priceMax || 0))}
-                    </p>
-                  </div>
-                </div>
-
-                <h4 className="text-sm font-semibold text-gray-900 mb-2">
-                  Historial de facturas
-                </h4>
-                {productHistory.length === 0 ? (
-                  <p className="text-sm text-gray-500">No se encontraron facturas.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {productHistory.map((item) => (
-                      <div key={item.codigoGeneracion} className="border border-gray-100 rounded-lg p-3">
-                        <p className="text-sm font-medium text-gray-900">
-                          {item.numeroControl || item.codigoGeneracion}
-                        </p>
-                        <p className="text-xs text-gray-500">Fecha: {item.fechaEmision}</p>
-                        <p className="text-xs text-gray-500">
-                          Proveedor: {item.proveedorNombre || '—'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Total: {formatCurrency(item.total)} · IVA est.: {formatCurrency(item.ivaEstimated)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <ProviderSidebar
+        provider={selectedProvider}
+        dateRange={dateRange}
+        onClose={() => setSelectedProvider(null)}
+      />
+      <ProductSidebar
+        product={selectedProduct}
+        dateRange={dateRange}
+        onClose={() => setSelectedProduct(null)}
+      />
     </Layout>
   );
 };

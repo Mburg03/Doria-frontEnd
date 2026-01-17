@@ -1,41 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import api from '../services/api';
 import { RefreshCw, Loader2, RefreshCcw, CheckCircle2 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, YAxis } from 'recharts';
+import { useGmailAuth } from '../hooks/useGmailAuth';
 
 const formatDate = (iso) => new Date(iso).toLocaleString();
 
 const Accounts = () => {
   const { user } = useAuth();
-  const [accounts, setAccounts] = useState([]);
-  const [usage, setUsage] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    gmailStatus,
+    loading: gmailLoading,
+    error: gmailError,
+    refreshStatus,
+    handleConnectGmail
+  } = useGmailAuth();
   const [error, setError] = useState(null);
   const [replacingId, setReplacingId] = useState(null);
   const [activatingId, setActivatingId] = useState(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [statusRes, usageRes] = await Promise.all([
-        api.get('/gmail/status'),
-        api.get('/packages/usage')
-      ]);
-      setAccounts(statusRes.data.accounts || []);
-      setUsage(usageRes.data);
-    } catch (err) {
-      setError('No se pudieron cargar las cuentas.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const accounts = gmailStatus.accounts || [];
+  const loading = gmailLoading;
+  const displayError = error || gmailError;
 
   const handleReplace = async (id, isReauth = false) => {
     if (!window.confirm(isReauth ? '¿Reautenticar esta cuenta? No consumirá cambios.' : '¿Reemplazar esta cuenta por otra? Se consumirá un cambio disponible.')) return;
@@ -61,14 +49,7 @@ const Accounts = () => {
       setError(`Tu plan permite hasta ${allowed} cuentas activas. Reemplaza una para continuar.`);
       return;
     }
-    try {
-      const res = await api.get('/gmail/auth');
-      if (res.data?.url) {
-        window.location.href = res.data.url;
-      }
-    } catch {
-      setError('No se pudo iniciar la conexión con Gmail. Revisa tu sesión o cupo.');
-    }
+    await handleConnectGmail();
   };
 
   const handleSetPrimary = async (id) => {
@@ -76,7 +57,7 @@ const Accounts = () => {
     setError(null);
     try {
       await api.patch(`/gmail/${id}/activate`);
-      await loadData();
+      await refreshStatus();
     } catch {
       setError('No se pudo marcar como activa.');
     } finally {
@@ -92,7 +73,7 @@ const Accounts = () => {
           <p className="text-gray-500">Conecta o desconecta tus cuentas de Gmail.</p>
         </div>
         <button
-          onClick={loadData}
+          onClick={refreshStatus}
           className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
         >
           <RefreshCw size={16} />
@@ -100,9 +81,9 @@ const Accounts = () => {
         </button>
       </div>
 
-      {error && (
+      {displayError && (
         <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
-          {error}
+          {displayError}
         </div>
       )}
 
@@ -231,7 +212,7 @@ const TopAccountHighlight = ({ accounts }) => {
 
   if (!top) return null;
 
-  const pct = Math.min((top.total / Math.max(top.total || 1, 1)) * 100, 100);
+  const pct = Math.min((top.total / Math.max(top.total || 1, 1)) * 100, 100); // revisar variable no usada PCT
 
   return (
     <div className="mb-6 bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-3">

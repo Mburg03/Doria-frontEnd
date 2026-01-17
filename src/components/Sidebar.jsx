@@ -20,7 +20,7 @@ const Sidebar = ({ mobileOpen = false, onClose = () => {} }) => {
   const navItems = [
     { name: "Búsqueda general", icon: LayoutDashboard, path: "/" },
     { name: "Búsqueda por proveedor", icon: Search, path: "/provider-search" },
-    { name: "Inteligencia de Datos", icon: TrendingUp, path: "/insights" },
+    { name: "Inteligencia de datos", icon: TrendingUp, path: "/insights" },
     { name: "Mis paquetes", icon: Package, path: "/packages" },
     { name: "Gestionar cuentas", icon: Mail, path: "/accounts" },
   ];
@@ -87,7 +87,15 @@ const Sidebar = ({ mobileOpen = false, onClose = () => {} }) => {
       </div>
 
       <div className="p-4 border-t border-gray-100">
-        <div className="space-y-2">
+        <div className="space-y-3">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="h-9 w-9 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold">
+              {(user?.name || 'U').slice(0, 2).toUpperCase()}
+            </div>
+            <div className="text-sm font-medium text-gray-900 truncate">
+              {user?.name || 'Usuario'}
+            </div>
+          </div>
           <Link
             to="/settings"
             className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-md transition-colors"

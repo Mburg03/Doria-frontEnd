@@ -1,63 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import { Mail, RefreshCw, CheckCircle, Download, Calendar, Search, ShieldAlert } from 'lucide-react';
 import api from '../services/api';
+import { getDefaultRange } from '../utils/dateRange';
+import { useGmailAuth } from '../hooks/useGmailAuth';
+import { useUsageLimits } from '../hooks/useUsageLimits';
 
 const Dashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [gmailStatus, setGmailStatus] = useState({ connected: false, checking: true, accounts: [] });
+    const {
+        gmailStatus,
+        activeAccount,
+        error: gmailError,
+        refreshStatus,
+        handleConnectGmail
+    } = useGmailAuth();
+    const {
+        usageInfo,
+        error: usageError,
+        refreshUsage
+    } = useUsageLimits();
     const [selectedAccount, setSelectedAccount] = useState('');
 
     // Search State
-    const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
+    const [dateRange, setDateRange] = useState(getDefaultRange());
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState(null);
     const [error, setError] = useState(null);
-    const [usageInfo, setUsageInfo] = useState(null); // {limit, remaining, usedAfter, plan}
     const [includeSpam, setIncludeSpam] = useState(false);
-
-    const fetchStatus = async () => {
-        try {
-            const res = await api.get('/gmail/status');
-            const accounts = res.data.accounts || [];
-            const activeAccounts = accounts.filter((a) => a.status !== 'disabled');
-            const primary = activeAccounts.find((a) => a.primary) || activeAccounts[0];
-            const primaryExpired = primary?.authState === 'expired';
-            setGmailStatus({
-                connected: activeAccounts.length > 0 && !primaryExpired,
-                checking: false,
-                accounts: activeAccounts,
-                needsReconnect: primaryExpired
-            });
-            setSelectedAccount(primary ? primary.id || primary._id || '' : '');
-        } catch {
-            setGmailStatus({ connected: false, checking: false, accounts: [], needsReconnect: false });
-            setSelectedAccount('');
-        }
-    };
-
-    // Initial Status Check & usage
     useEffect(() => {
-        fetchStatus();
-        const fetchUsage = async () => {
-            try {
-                const res = await api.get('/packages/usage');
-                setUsageInfo({
-                    plan: res.data.plan,
-                    limit: res.data.limit,
-                    usedAfter: res.data.used,
-                    remaining: res.data.remaining,
-                    zipLimitBytes: res.data.zipLimitBytes
-                });
-            } catch {
-                // ignore
-            }
-        };
-        fetchUsage();
-    }, []);
+        setSelectedAccount(activeAccount?.id || activeAccount?._id || '');
+    }, [activeAccount]);
+
+    const activeAccounts = useMemo(
+        () => (gmailStatus.accounts || []).filter((account) => account.status !== 'disabled'),
+        [gmailStatus.accounts]
+    );
 
     // Load latest package
 
@@ -91,13 +72,13 @@ const Dashboard = () => {
             });
             setResults(res.data);
             if (res.data?.limitInfo) {
-                setUsageInfo(res.data.limitInfo);
+                refreshUsage();
             }
         } catch (err) {
             const message = err.response?.data?.message || err.response?.data?.msg || err.message;
             if (err.response?.status === 401 && message?.toLowerCase().includes('reconecta')) {
                 setError('Tu cuenta de Google expiró. Reconecta presionando el botón.');
-                await fetchStatus();
+                await refreshStatus();
             } else {
                 setError(message);
             }
@@ -126,29 +107,20 @@ const Dashboard = () => {
         }
     };
 
-    const handleConnectGmail = async () => {
-        // Si ya hay cuentas activas, lleva a gestionar cuentas
+    const handleConnectClick = async () => {
         if (gmailStatus.connected) {
             navigate('/accounts');
             return;
         }
-        try {
-            const res = await api.get('/gmail/auth');
-            if (res.data?.url) {
-                window.location.href = res.data.url;
-            }
-        } catch (err) {
-            setError('No se pudo iniciar la conexión con Gmail. Revisa tu sesión.');
-        }
+        await handleConnectGmail();
     };
 
     const handleDisconnectGmail = async () => {
-        if (!selectedAccount && gmailStatus.accounts.length > 1) {
+        if (!selectedAccount && activeAccounts.length > 1) {
             setError('Selecciona una cuenta para desconectar.');
             return;
         }
         try {
-            const activeAccounts = gmailStatus.accounts || [];
             const target = activeAccounts.find((a) => a.primary) || activeAccounts[0];
             const targetId = target ? target._id || target.id : null;
             if (!targetId) {
@@ -156,12 +128,14 @@ const Dashboard = () => {
                 return;
             }
             await api.delete(`/gmail/${targetId}`);
-            await fetchStatus();
+            await refreshStatus();
             setSelectedAccount('');
         } catch (err) {
             setError('No se pudo desconectar Gmail. Intenta de nuevo.');
         }
     };
+
+    const displayError = error || gmailError || usageError;
 
     // Vista para usuarios viewer (sin permisos)
     if (user?.role === 'viewer') {
@@ -271,9 +245,9 @@ const Dashboard = () => {
                     </div>
 
                     {/* Results Area */}
-                    {error && (
+                    {displayError && (
                         <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200 text-sm">
-                            {error}
+                            {displayError}
                         </div>
                     )}
 
@@ -392,28 +366,27 @@ const Dashboard = () => {
                                     {gmailStatus.needsReconnect ? 'Requiere reconexión' : gmailStatus.connected ? 'Conectado' : 'Desconectado'}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                    {gmailStatus.accounts?.length
+                                    {activeAccounts.length
                                         ? (
                                             <>
                                                 <span className="font-semibold text-gray-900">Activa:</span>{' '}
                                                 <span className="font-semibold text-gray-900">
-                                                    {gmailStatus.accounts.find((a) => a.primary)?.email ||
-                                                        gmailStatus.accounts[0].email}
+                                                    {activeAccounts.find((a) => a.primary)?.email || activeAccounts[0].email}
                                                 </span>
                                             </>
                                         )
                                         : 'Cuenta Gmail'}
                                 </p>
-                                {gmailStatus.accounts?.length > 1 && (
+                                {activeAccounts.length > 1 && (
                                     <p className="text-[11px] text-gray-400">
-                                        Otras: {gmailStatus.accounts.filter((a) => !a.primary).map((a) => a.email).join(' · ')}
+                                        Otras: {activeAccounts.filter((a) => !a.primary).map((a) => a.email).join(' · ')}
                                     </p>
                                 )}
                             </div>
                         </div>
 
                         <button
-                            onClick={handleConnectGmail}
+                            onClick={handleConnectClick}
                             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm"
                         >
                             <span className="inline-flex items-center gap-2">
@@ -452,12 +425,12 @@ const Dashboard = () => {
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between text-sm text-gray-700">
                                     <span>Uso mensual de DTE</span>
-                                    <span>{usageInfo.usedAfter} / {usageInfo.limit}</span>
+                                    <span>{usageInfo.used} / {usageInfo.limit}</span>
                                 </div>
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                     <div
                                         className={`h-full ${usageInfo.remaining <= 0 ? 'bg-red-500' : 'bg-blue-500'}`}
-                                        style={{ width: `${Math.min((usageInfo.usedAfter / usageInfo.limit) * 100, 100)}%` }}
+                                        style={{ width: `${Math.min((usageInfo.used / usageInfo.limit) * 100, 100)}%` }}
                                     ></div>
                                 </div>
                                 {usageInfo.remaining <= 0 ? (

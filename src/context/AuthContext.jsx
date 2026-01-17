@@ -55,10 +55,11 @@ export const AuthProvider = ({ children }) => {
         } catch (err) {
             // silencioso
         }
+        await new Promise((resolve) => setTimeout(resolve, 700));
         setAccessToken(null);
         clearAccessToken();
         setUser(null);
-        setTimeout(() => setLoggingOut(false), 600); // pequeño delay para feedback visual
+        setLoggingOut(false);
     };
 
     return (
