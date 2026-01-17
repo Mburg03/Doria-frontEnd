@@ -200,6 +200,12 @@ const ProviderSearch = () => {
     }
   };
 
+  const handleDownloadMaster = (url) => {
+    if (url) {
+      window.location.href = url;
+    }
+  };
+
   const handleConnectGmail = async () => {
     if (gmailStatus.connected) {
       navigate('/accounts');
@@ -352,7 +358,15 @@ const ProviderSearch = () => {
                     </span>
                   </p>
                 </div>
-                {results.packages?.length === 1 && (
+                {results.master?.url ? (
+                  <button
+                    onClick={() => handleDownloadMaster(results.master.url)}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                  >
+                    <Download size={16} />
+                    Descargar todo
+                  </button>
+                ) : results.packages?.length === 1 && (
                   <button
                     onClick={() => handleDownloadPackage(results.packages[0].id)}
                     className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
@@ -363,7 +377,7 @@ const ProviderSearch = () => {
                 )}
               </div>
 
-              {results.packages?.length > 1 ? (
+              {results.packages?.length > 1 && !results.master?.url ? (
                 <div className="divide-y divide-gray-100">
                   {results.packages.map((pkg) => (
                     <div key={pkg.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -399,10 +413,10 @@ const ProviderSearch = () => {
         </div>
 
         <div className="space-y-6 lg:col-span-2">
-          {recentProviders.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-fit lg:sticky lg:top-6">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-sm font-semibold text-gray-900">Proveedores recientes</h3>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 h-fit lg:sticky lg:top-6">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-semibold text-gray-900">Proveedores recientes</h3>
+              {recentProviders.length > 0 && (
                 <button
                   type="button"
                   onClick={clearRecent}
@@ -410,22 +424,35 @@ const ProviderSearch = () => {
                 >
                   Limpiar
                 </button>
-              </div>
-              <p className="text-xs text-gray-500 mb-4">Selecciona un proveedor usado recientemente para la búsqueda.</p>
-              <div className="flex flex-wrap gap-2">
-                {recentProviders.map((email) => (
-                  <button
-                    key={email}
-                    type="button"
-                    onClick={() => handleUseRecent(email)}
-                    className="px-2 py-1 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
-                  >
-                    {email}
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
-          )}
+            {recentProviders.length > 0 ? (
+              <>
+                <p className="text-xs text-gray-500 mb-4">
+                  Selecciona un proveedor usado recientemente para la búsqueda.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {recentProviders.map((email) => (
+                    <button
+                      key={email}
+                      type="button"
+                      onClick={() => handleUseRecent(email)}
+                      className="px-2 py-1 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    >
+                      {email}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
+                <p className="text-sm font-medium text-gray-800">Haz tu primera búsqueda</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Aquí aparecerán los proveedores recientes para seleccionarlos rápido.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       

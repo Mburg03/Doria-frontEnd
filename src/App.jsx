@@ -9,6 +9,7 @@ import ResetPassword from './pages/ResetPassword';
 import AdminUsers from './pages/AdminUsers';
 import Accounts from './pages/Accounts';
 import ProviderSearch from './pages/ProviderSearch';
+import Insights from './pages/Insights';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 
@@ -74,6 +75,14 @@ function App() {
         element={
           <ProtectedRoute>
             <ProviderSearch />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/insights"
+        element={
+          <ProtectedRoute>
+            <Insights />
           </ProtectedRoute>
         }
       />

@@ -120,6 +120,12 @@ const Dashboard = () => {
         }
     };
 
+    const handleDownloadMaster = (url) => {
+        if (url) {
+            window.location.href = url;
+        }
+    };
+
     const handleConnectGmail = async () => {
         // Si ya hay cuentas activas, lleva a gestionar cuentas
         if (gmailStatus.connected) {
@@ -308,7 +314,15 @@ const Dashboard = () => {
                                         <p className="mt-1 text-xs text-amber-700">{results.limitInfo.message}</p>
                                     )}
                                 </div>
-                                {results.packages?.length === 1 && (
+                                {results.master?.url ? (
+                                    <button
+                                        onClick={() => handleDownloadMaster(results.master.url)}
+                                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                                    >
+                                        <Download size={16} />
+                                        Descargar todo
+                                    </button>
+                                ) : results.packages?.length === 1 && (
                                     <button
                                         onClick={() => handleDownloadPackage(results.packages[0].id)}
                                         className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
@@ -319,7 +333,7 @@ const Dashboard = () => {
                                 )}
                             </div>
 
-                            {results.packages?.length > 1 ? (
+                            {results.packages?.length > 1 && !results.master?.url ? (
                                 <div className="divide-y divide-gray-100">
                                     {results.packages.map((pkg) => (
                                         <div key={pkg.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
