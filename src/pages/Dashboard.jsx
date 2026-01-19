@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import Layout from '../components/Layout';
-import { Mail, RefreshCw, CheckCircle, Download, Calendar, Search, ShieldAlert } from 'lucide-react';
+import { Mail, RefreshCw, CheckCircle, Download, Calendar, Search, ShieldAlert, Package, X, History } from 'lucide-react';
+import clsx from 'clsx';
 import api from '../services/api';
 import { getDefaultRange } from '../utils/dateRange';
 import { useGmailAuth } from '../hooks/useGmailAuth';
@@ -30,7 +30,14 @@ const Dashboard = () => {
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState(null);
     const [error, setError] = useState(null);
-    const [includeSpam, setIncludeSpam] = useState(false);
+    const [providerEmails, setProviderEmails] = useState([]);
+    const [providerInput, setProviderInput] = useState('');
+    const [recentProviders, setRecentProviders] = useState([]);
+    const [searchMode, setSearchMode] = useState('all'); // 'all' or 'providers'
+
+    const recentKey = user?._id ? `doria.providers.recent.${user._id}` : 'doria.providers.recent';
+    const emailPattern = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    const maxProviders = 10;
     useEffect(() => {
         setSelectedAccount(activeAccount?.id || activeAccount?._id || '');
     }, [activeAccount]);
@@ -39,6 +46,70 @@ const Dashboard = () => {
         () => (gmailStatus.accounts || []).filter((account) => account.status !== 'disabled'),
         [gmailStatus.accounts]
     );
+
+    useEffect(() => {
+        try {
+            const stored = localStorage.getItem(recentKey);
+            if (stored) {
+                setRecentProviders(JSON.parse(stored));
+            }
+        } catch { /* ignore */ }
+    }, [recentKey]);
+
+    const persistRecent = (items) => {
+        setRecentProviders(items);
+        try {
+            localStorage.setItem(recentKey, JSON.stringify(items));
+        } catch { /* ignore */ }
+    };
+
+    const addProvidersFromInput = () => {
+        const raw = providerInput.split(',');
+        const cleaned = raw.map((email) => email.trim().toLowerCase()).filter(Boolean);
+        if (!cleaned.length) return;
+        const invalid = cleaned.filter((email) => !emailPattern.test(email));
+        const valid = cleaned.filter((email) => emailPattern.test(email));
+        if (invalid.length) {
+            setError(`Correos inválidos: ${invalid.join(', ')}`);
+        }
+        if (!valid.length) {
+            setProviderInput('');
+            return;
+        }
+        setProviderEmails((prev) => {
+            const merged = Array.from(new Set([...prev, ...valid]));
+            if (merged.length > maxProviders) {
+                setError(`Máximo ${maxProviders} proveedores.`);
+                return merged.slice(0, maxProviders);
+            }
+            return merged;
+        });
+        const nextRecent = Array.from(new Set([...valid, ...recentProviders])).slice(0, maxProviders);
+        persistRecent(nextRecent);
+        setProviderInput('');
+    };
+
+    const handleProviderKey = (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            addProvidersFromInput();
+        }
+    };
+
+    const removeProvider = (email) => {
+        setProviderEmails((prev) => prev.filter((item) => item !== email));
+    };
+
+    const handleUseRecent = (email) => {
+        setProviderEmails((prev) => {
+            if (prev.includes(email)) return prev;
+            if (prev.length >= maxProviders) {
+                setError(`Máximo ${maxProviders} proveedores.`);
+                return prev;
+            }
+            return [...prev, email];
+        });
+    };
 
     // Load latest package
 
@@ -64,11 +135,12 @@ const Dashboard = () => {
         try {
             // Genera paquete y devuelve summary + packageId
             const res = await api.post('/packages/generate', {
-                startDate: dateRange.startDate.replaceAll('-', '/'),
-                endDate: dateRange.endDate.replaceAll('-', '/'),
+                startDate: dateRange.startDate,
+                endDate: dateRange.endDate,
                 accountId: selectedAccount || undefined,
-                includeSpam,
-                exhaustive: true
+                includeSpam: true,
+                exhaustive: true,
+                senderEmails: searchMode === 'providers' && providerEmails.length ? providerEmails : undefined
             });
             setResults(res.data);
             if (res.data?.limitInfo) {
@@ -140,7 +212,7 @@ const Dashboard = () => {
     // Vista para usuarios viewer (sin permisos)
     if (user?.role === 'viewer') {
         return (
-            <Layout>
+            <>
                 <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
                     <h1 className="text-2xl font-bold text-gray-900 mb-2">Panel</h1>
                     <p className="text-gray-600 mb-4">
@@ -150,306 +222,333 @@ const Dashboard = () => {
                         <p>Si necesitas permisos, contacta a un administrador o soporte.</p>
                     </div>
                 </div>
-            </Layout>
+            </>
         );
     }
 
     return (
-        <Layout>
-            <div className="mb-8">
-                <h1 className="text-2xl font-bold text-gray-900">Panel</h1>
-                <p className="text-gray-500">Gestiona tus descargas de facturas y conexiones.</p>
+        <div className="max-w-6xl mx-auto pb-12">
+            {/* dynamic Header */}
+            <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                <div className="flex items-center gap-3 mb-1">
+                    <div className="h-1 w-5 bg-blue-600 rounded-full"></div>
+                    <span className="text-blue-600 font-bold text-[10px] uppercase tracking-[0.2em]">Dashboard</span>
+                </div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                    Hola, <span className="text-blue-600 font-bold">{user?.name?.split(' ')[0] || 'Usuario'}</span>
+                </h1>
+                <p className="text-gray-400 mt-1 text-sm font-medium">Gestiona tus descargas de facturas y conexiones.</p>
             </div>
 
-            {/* Grid Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                {/* Left Column: Search Tools */}
-                <div className="lg:col-span-2 space-y-6">
-
-                    {/* Search Card */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                <Search size={20} className="text-blue-600" />
-                                Buscar facturas
-                            </h2>
-                      
+            {/* Top Stats Grid - Horizontal for better space usage */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                {/* Connection Card */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-50 shadow-sm flex items-center justify-between group hover:border-blue-100 transition-all duration-300">
+                    <div className="flex items-center gap-4">
+                        <div className={clsx(
+                            "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-300",
+                            gmailStatus.connected ? "text-green-500" : "text-amber-500"
+                        )}>
+                            <Mail size={20} />
                         </div>
-
-                        <div className="space-y-6">
-                            {/* Date Range */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha inicio</label>
-                                    <div className="relative">
-                                        <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <input
-                                            type="date"
-                                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                                            value={dateRange.startDate}
-                                            max={new Date().toISOString().slice(0, 10)}
-                                            onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha fin</label>
-                                    <div className="relative">
-                                        <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <input
-                                            type="date"
-                                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                                            value={dateRange.endDate}
-                                            max={new Date().toISOString().slice(0, 10)}
-                                            onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                    {/* Selector de cuenta Gmail (si hay varias) */}
-                    {/* Selector removido: usaremos siempre la cuenta primaria */}
-                            {/* Action Button */}
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <input
-                                    id="includeSpam"
-                                    type="checkbox"
-                                    checked={includeSpam}
-                                    onChange={(e) => setIncludeSpam(e.target.checked)}
-                                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                                />
-                                <label htmlFor="includeSpam">Incluir correos en Spam</label>
-                            </div>
-                            <button
-                                onClick={handleSearch}
-                                disabled={
-                                    isSearching ||
-                                    !dateRange.startDate ||
-                                    !dateRange.endDate ||
-                                    !gmailStatus.connected
-                                }
-                                className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 transition active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                {isSearching ? <RefreshCw className="animate-spin" /> : <Search size={20} />}
-                                {isSearching ? 'Buscando...' : 'Buscar facturas'}
-                            </button>
-
-                            {!gmailStatus.connected && (
-                                <div className="flex items-center gap-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm">
-                                    <ShieldAlert size={16} />
-                                    <span>Conecta tu cuenta de Gmail para poder buscar facturas.</span>
-                                </div>
+                        <div className="min-w-0">
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Gmail</p>
+                            <p className="text-lg font-black text-gray-900 leading-tight">
+                                {gmailStatus.needsReconnect ? 'Reconexión' : gmailStatus.connected ? 'Conectado' : 'Desconectado'}
+                            </p>
+                            {activeAccount && (
+                                <p className="text-[11px] text-blue-500 font-bold mt-0.5 truncate max-w-[150px]">
+                                    {activeAccount.email}
+                                </p>
                             )}
                         </div>
                     </div>
+                    <button
+                        onClick={handleConnectClick}
+                        className="px-4 py-2 bg-gray-900 text-white text-[11px] font-bold rounded-lg hover:bg-blue-600 hover:shadow-lg transition-all active:scale-95 whitespace-nowrap"
+                    >
+                        {gmailStatus.connected ? 'Gestionar' : 'Conectar'}
+                    </button>
+                </div>
 
-                    {/* Results Area */}
-                    {displayError && (
-                        <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200 text-sm">
-                            {displayError}
+                {/* Usage Card */}
+                <div className="bg-white p-5 rounded-2xl border border-gray-50 shadow-sm group hover:border-blue-100 transition-all duration-300">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-xl text-blue-500 flex items-center justify-center transition-all duration-300">
+                                <CheckCircle size={20} />
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Uso del Plan</p>
+                                <p className="text-lg font-bold text-gray-900 leading-tight">
+                                    {usageInfo?.used || 0} <span className="text-xs font-medium text-gray-400">/ {usageInfo?.limit || 0} DTEs</span>
+                                </p>
+                            </div>
                         </div>
-                    )}
+                        {usageInfo?.plan && (
+                            <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[9px] font-black uppercase border border-blue-100">
+                                {usageInfo.plan}
+                            </span>
+                        )}
+                    </div>
+                    <div className="space-y-2">
+                        <div className="h-1.5 w-full bg-gray-50 rounded-full overflow-hidden">
+                            <div
+                                className={clsx(
+                                    "h-full transition-all duration-1000 cubic-bezier(0.4, 0, 0.2, 1)",
+                                    usageInfo?.remaining <= 0 ? "bg-red-500" : "bg-gradient-to-r from-blue-500 to-indigo-600"
+                                )}
+                                style={{ width: `${Math.min(((usageInfo?.used || 0) / (usageInfo?.limit || 1)) * 100, 100)}%` }}
+                            ></div>
+                        </div>
+                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+                            <span>Progreso mensual</span>
+                            <span className="text-blue-600">{usageInfo?.remaining || 0} Disponibles</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                    <div className="bg-blue-50 text-blue-800 p-3 rounded-lg border border-blue-100 text-sm">
-                        <p>Máximo 31 días por búsqueda para asegurar la descarga.</p>
+            {/* Search Tool - "Slim" and Modern */}
+            <div className="bg-white rounded-3xl shadow-xl shadow-gray-100/40 border border-gray-50 p-7 mb-10 relative overflow-hidden">
+                <div className="absolute top-0 right-0 -mr-20 -mt-20 w-80 h-80 bg-blue-50/10 rounded-full blur-3xl text-blue-500"></div>
+
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 relative">
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-900 tracking-tight">Filtro de Extracción</h2>
+                        <p className="text-xs text-gray-400 font-medium">Localiza y organiza tus facturas desde Gmail.</p>
                     </div>
 
+                    <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100 w-fit">
+                        <button
+                            onClick={() => setSearchMode('all')}
+                            className={clsx(
+                                "px-4 py-1.5 text-[10px] font-black uppercase rounded-lg transition-all",
+                                searchMode === 'all' ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                            )}
+                        >
+                            General
+                        </button>
+                        <button
+                            onClick={() => setSearchMode('providers')}
+                            className={clsx(
+                                "px-4 py-1.5 text-[10px] font-black uppercase rounded-lg transition-all",
+                                searchMode === 'providers' ? "bg-white text-gray-900 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                            )}
+                        >
+                            Por Proveedor
+                        </button>
+                    </div>
+                </div>
 
-                    {results && (
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                                <div>
-                                    <h3 className="text-lg font-semibold text-gray-900">Resultados</h3>
-                                    <p className="text-sm text-gray-500">
-                                        Encontrados{' '}
-                                        <span className="font-bold text-gray-900">
-                                            {results.summary?.messagesFound ?? results.messagesFound ?? 0}
-                                        </span>{' '}
-                                        correos con{' '}
-                                        <span className="font-bold text-gray-900">
-                                            {results.summary?.filesSaved ?? results.filesSaved ?? 0}
-                                        </span>{' '}
-                                        adjuntos válidos.
-                                        {' '}PDF: <span className="font-bold text-gray-900">
-                                            {results.summary?.pdfCount ?? results.pdfCount ?? 0}
-                                        </span>{' '}
-                                        · JSON:{' '}
-                                        <span className="font-bold text-gray-900">
-                                            {results.summary?.jsonCount ?? results.jsonCount ?? 0}
-                                        </span>
-                                    </p>
-                                    {results.searchMode === 'exhaustive' && (
-                                        <p className="mt-1 text-xs text-blue-700">
-                                            Búsqueda exhaustiva activada.
-                                        </p>
-                                    )}
-                                    {results.limitInfo?.limitReached && results.limitInfo?.message && (
-                                        <p className="mt-1 text-xs text-amber-700">{results.limitInfo.message}</p>
-                                    )}
+                {/* Provider Section - Conditional */}
+                {searchMode === 'providers' && (
+                    <div className="mb-8 relative group animate-in fade-in slide-in-from-top-2 duration-300">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2.5 ml-1">Correos de proveedores</label>
+                        <div className="flex flex-wrap gap-2 mb-3 min-h-[32px] items-center">
+                            {providerEmails.map((email) => (
+                                <span key={email} className="inline-flex items-center gap-1.5 text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 px-2.5 py-1.5 rounded-full animate-in zoom-in duration-300">
+                                    {email}
+                                    <button type="button" onClick={() => removeProvider(email)} className="text-blue-400 hover:text-blue-700 transition-colors">
+                                        <X size={12} strokeWidth={3} />
+                                    </button>
+                                </span>
+                            ))}
+                            {providerEmails.length === 0 && (
+                                <span className="text-[11px] text-gray-300 italic py-1 leading-none">Agrega al menos un correo para filtrar...</span>
+                            )}
+                        </div>
+                        <div className="relative">
+                            <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
+                            <input
+                                type="text"
+                                value={providerInput}
+                                onChange={(e) => setProviderInput(e.target.value)}
+                                onKeyDown={handleProviderKey}
+                                onBlur={addProvidersFromInput}
+                                placeholder="Escribe el correo y presiona Enter..."
+                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-600 focus:ring-0 outline-none text-xs font-bold text-gray-900 transition-all shadow-sm"
+                            />
+                        </div>
+
+                        {recentProviders.length > 0 && providerEmails.length < maxProviders && (
+                            <div className="mt-3 flex flex-wrap gap-2 items-center">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase mr-1">Sugerencias:</span>
+                                {recentProviders.filter(r => !providerEmails.includes(r)).slice(0, 5).map(email => (
+                                    <button
+                                        key={email}
+                                        type="button"
+                                        onClick={() => handleUseRecent(email)}
+                                        className="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-gray-100 bg-gray-50 text-gray-500 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-100 transition-all"
+                                    >
+                                        {email}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end relative">
+                    <div className="md:col-span-4">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2.5 ml-1">Fecha inicio</label>
+                        <div className="relative group">
+                            <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
+                            <input
+                                type="date"
+                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-600 focus:ring-0 outline-none text-xs font-bold text-gray-900 transition-all shadow-sm"
+                                value={dateRange.startDate}
+                                max={new Date().toLocaleDateString('en-CA')}
+                                onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                    <div className="md:col-span-4">
+                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2.5 ml-1">Fecha fin</label>
+                        <div className="relative group">
+                            <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
+                            <input
+                                type="date"
+                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-transparent rounded-xl focus:bg-white focus:border-blue-600 focus:ring-0 outline-none text-xs font-bold text-gray-900 transition-all shadow-sm"
+                                value={dateRange.endDate}
+                                max={new Date().toLocaleDateString('en-CA')}
+                                onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                    <div className="md:col-span-4">
+                        <button
+                            onClick={handleSearch}
+                            disabled={isSearching || !dateRange.startDate || !dateRange.endDate || !gmailStatus.connected}
+                            className="w-full bg-blue-600 text-white py-3 rounded-xl font-black text-sm hover:bg-blue-700 transition-all active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-200 flex items-center justify-center gap-3"
+                            style={{ height: '48px' }}
+                        >
+                            {isSearching ? <RefreshCw className="animate-spin" size={20} /> : <Search size={18} />}
+                            {isSearching ? 'PROCESANDO...' : 'BUSCAR'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="mt-8 pt-8 border-t border-gray-50 flex flex-wrap items-center justify-between gap-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                            <CheckCircle size={16} />
+                        </div>
+                        <span className="text-xs font-bold text-gray-500">Búsqueda exhaustiva activada (incluye carpeta Spam)</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100">
+                        <ShieldAlert size={14} className="text-blue-600" />
+                        <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">Máximo 31 días por búsqueda</span>
+                    </div>
+                </div>
+
+                {!gmailStatus.connected && (
+                    <div className="mt-6 flex items-center gap-4 text-amber-600 bg-amber-50 p-5 rounded-3xl border border-amber-100 text-sm font-bold animate-in zoom-in duration-300">
+                        <ShieldAlert size={20} />
+                        <span>Es necesario conectar una cuenta de Gmail para realizar búsquedas.</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Error and Results */}
+            <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
+                {displayError && (
+                    <div className="bg-red-50 text-red-700 p-5 rounded-2xl border border-red-100 text-sm font-bold flex items-center gap-3">
+                        <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+                        {displayError}
+                    </div>
+                )}
+
+                {results && (
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-gray-200 border border-gray-100 overflow-hidden">
+                        <div className="p-10 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-8 bg-gradient-to-br from-gray-50/50 via-white to-white">
+                            <div>
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className="h-3 w-3 bg-green-500 rounded-full animate-pulse shadow-lg shadow-green-200"></div>
+                                    <h3 className="text-2xl font-black text-gray-900 tracking-tight">Extracción Exitosa</h3>
                                 </div>
+                                <p className="text-gray-500 font-medium max-w-xl leading-relaxed">
+                                    Hemos analizado <span className="text-blue-600 font-black">{results.summary?.messagesFound ?? results.messagesFound ?? 0} correos</span>,
+                                    detectando <span className="text-gray-900 font-black">{results.summary?.filesSaved ?? results.filesSaved ?? 0} documentos</span> DTE para procesar.
+                                </p>
+                                <div className="flex gap-4 mt-5">
+                                    <span className="px-3 py-1.5 bg-white rounded-lg border border-gray-100 shadow-sm text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        PDF: <span className="text-gray-900">{results.summary?.pdfCount ?? results.pdfCount ?? 0}</span>
+                                    </span>
+                                    <span className="px-3 py-1.5 bg-white rounded-lg border border-gray-100 shadow-sm text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        JSON: <span className="text-gray-900">{results.summary?.jsonCount ?? results.jsonCount ?? 0}</span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="shrink-0">
                                 {results.master?.url ? (
                                     <button
                                         onClick={() => handleDownloadMaster(results.master.url)}
-                                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                                        className="px-10 py-5 bg-green-600 text-white text-base font-black rounded-2xl hover:bg-green-700 transition-all flex items-center gap-4 shadow-xl shadow-green-100 group active:scale-95"
                                     >
-                                        <Download size={16} />
-                                        Descargar todo
+                                        <Download size={24} className="group-hover:translate-y-1 transition-transform" />
+                                        DESCARGAR TODO (.ZIP)
                                     </button>
                                 ) : results.packages?.length === 1 && (
                                     <button
                                         onClick={() => handleDownloadPackage(results.packages[0].id)}
-                                        className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                                        className="px-10 py-5 bg-green-600 text-white text-base font-black rounded-2xl hover:bg-green-700 transition-all flex items-center gap-4 shadow-xl shadow-green-100 group active:scale-95"
                                     >
-                                        <Download size={16} />
-                                        Descargar ZIP
+                                        <Download size={24} className="group-hover:translate-y-1 transition-transform" />
+                                        DESCARGAR ZIP
                                     </button>
                                 )}
                             </div>
+                        </div>
 
+                        <div className="p-10 bg-white">
                             {results.packages?.length > 1 && !results.master?.url ? (
-                                <div className="divide-y divide-gray-100">
+                                <div className="grid grid-cols-1 gap-6">
                                     {results.packages.map((pkg) => (
-                                        <div key={pkg.id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                            <div className="text-sm text-gray-700">
-                                                <p className="font-semibold text-gray-900">
-                                                    Rango: {pkg.startDate} a {pkg.endDate}
-                                                </p>
-                                                <p className="text-xs text-gray-500">
-                                                    Cuenta: {pkg.accountEmail || '—'} · PDFs: {pkg.pdfCount || 0} · JSON: {pkg.jsonCount || 0}
-                                                </p>
+                                        <div key={pkg.id} className="p-6 bg-gray-50/50 rounded-3xl border border-gray-100 flex items-center justify-between group hover:bg-white hover:border-blue-200 transition-all duration-500">
+                                            <div className="flex gap-6 items-center">
+                                                <div className="w-12 h-12 bg-white rounded-2xl border border-gray-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                                    <Download size={24} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-gray-900 text-lg">
+                                                        Periodo: {pkg.startDate} — {pkg.endDate}
+                                                    </p>
+                                                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-tight mt-1">
+                                                        {pkg.accountEmail} · {pkg.pdfCount} PDFs · {pkg.jsonCount} JSONs
+                                                    </p>
+                                                </div>
                                             </div>
                                             <button
                                                 onClick={() => handleDownloadPackage(pkg.id)}
-                                                className="px-3 py-2 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm shadow-green-200"
+                                                className="w-14 h-14 bg-white text-green-600 rounded-2xl hover:bg-green-600 hover:text-white transition-all shadow-sm border border-gray-100 flex items-center justify-center active:scale-90"
                                             >
-                                                <Download size={14} />
-                                                Descargar ZIP
+                                                <Download size={24} />
                                             </button>
                                         </div>
                                     ))}
                                 </div>
                             ) : (
-                                <div className="p-8 text-center space-y-2">
-                                    <div className="inline-flex justify-center items-center w-16 h-16 bg-green-50 text-green-600 rounded-full mb-4">
-                                        <CheckCircle size={32} />
+                                <div className="flex flex-col items-center justify-center py-16 text-center">
+                                    <div className="relative mb-8">
+                                        <div className="absolute inset-0 bg-green-200 rounded-full animate-ping opacity-20 duration-[2000ms]"></div>
+                                        <div className="relative w-28 h-28 bg-green-50 text-green-500 rounded-[2.5rem] flex items-center justify-center shadow-inner border border-green-100">
+                                            <CheckCircle size={56} strokeWidth={1.5} />
+                                        </div>
                                     </div>
-                                    <h4 className="text-gray-900 font-medium">Listo para descargar</h4>
-                                    <p className="text-gray-500 text-sm">Tu paquete se generó correctamente.</p>
-                                    <div className="text-sm text-gray-600">
-                                        <p>
-                                            Correos: <span className="font-semibold">{results.summary?.messagesFound ?? results.messagesFound ?? 0}</span> · Archivos: <span className="font-semibold">{results.summary?.filesSaved ?? results.filesSaved ?? 0}</span>
-                                        </p>
-                                    </div>
+                                    <h4 className="text-3xl font-black text-gray-900 mb-2 tracking-tighter">¡Extracción Lista!</h4>
+                                    <p className="text-gray-500 font-medium max-w-xs text-lg">
+                                        Hemos organizado tus archivos perfectamente para descargar.
+                                    </p>
                                 </div>
                             )}
                         </div>
-                    )}
-
-                </div>
-
-                {/* Right Column: Status & History */}
-                <div className="space-y-6">
-                    {/* Status Card */}
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-4 opacity-10">
-                            <Mail size={100} />
-                        </div>
-                        <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider mb-4">Estado de conexión</h3>
-
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className={`p-3 rounded-full ${gmailStatus.connected ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
-                                <Mail size={24} />
-                            </div>
-                            <div>
-                                <p className="font-bold text-gray-900">
-                                    {gmailStatus.needsReconnect ? 'Requiere reconexión' : gmailStatus.connected ? 'Conectado' : 'Desconectado'}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                    {activeAccounts.length
-                                        ? (
-                                            <>
-                                                <span className="font-semibold text-gray-900">Activa:</span>{' '}
-                                                <span className="font-semibold text-gray-900">
-                                                    {activeAccounts.find((a) => a.primary)?.email || activeAccounts[0].email}
-                                                </span>
-                                            </>
-                                        )
-                                        : 'Cuenta Gmail'}
-                                </p>
-                                {activeAccounts.length > 1 && (
-                                    <p className="text-[11px] text-gray-400">
-                                        Otras: {activeAccounts.filter((a) => !a.primary).map((a) => a.email).join(' · ')}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={handleConnectClick}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm"
-                        >
-                            <span className="inline-flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="h-4 w-4">
-                                    <path fill="#EA4335" d="M24 9.5c3.23 0 5.44 1.4 6.68 2.57l4.87-4.78C32.67 4.2 28.78 2.5 24 2.5 14.82 2.5 7.09 8.73 4.66 17.1l5.96 4.63C11.77 14.86 17.25 9.5 24 9.5z"/>
-                                    <path fill="#4285F4" d="M46.5 24.5c0-1.47-.13-2.89-.38-4.25H24v8.05h12.65c-.55 2.95-2.19 5.46-4.67 7.15l7.36 5.7C43.72 36.93 46.5 31.23 46.5 24.5z"/>
-                                    <path fill="#FBBC05" d="M10.62 28.23A14.8 14.8 0 0 1 9.5 24c0-1.47.25-2.9.69-4.23l-5.96-4.63A21.95 21.95 0 0 0 2 24c0 3.53.84 6.87 2.33 9.86l6.29-5.63z"/>
-                                    <path fill="#34A853" d="M24 46.5c5.94 0 10.93-1.95 14.58-5.3l-7.36-5.7c-2.06 1.39-4.69 2.2-7.22 2.2-6.75 0-12.46-4.56-14.5-10.87l-6.29 5.63C7.09 39.27 14.82 46.5 24 46.5z"/>
-                                    <path fill="none" d="M2 2h44v44H2z"/>
-                                </svg>
-                                {gmailStatus.needsReconnect
-                                    ? 'Reconectar Gmail'
-                                    : gmailStatus.connected
-                                    ? 'Gestionar cuentas'
-                                    : 'Conectar Gmail'}
-                            </span>
-                        </button>
-                        {gmailStatus.needsReconnect && (
-                            <p className="mt-2 text-xs text-amber-700">
-                                Tu cuenta de Google expiró. Reconecta presionando el botón.
-                            </p>
-                        )}
                     </div>
-
-                    {/* Estado de cuenta (uso y último paquete) */}
-                    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-gray-500 text-sm font-semibold uppercase tracking-wider">Estado de cuenta</h3>
-                            {usageInfo?.plan && (
-                                <span className="text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-100">
-                                    Plan: {usageInfo.plan}
-                                </span>
-                            )}
-                        </div>
-                        {usageInfo && (
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between text-sm text-gray-700">
-                                    <span>Uso mensual de DTE</span>
-                                    <span>{usageInfo.used} / {usageInfo.limit}</span>
-                                </div>
-                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full ${usageInfo.remaining <= 0 ? 'bg-red-500' : 'bg-blue-500'}`}
-                                        style={{ width: `${Math.min((usageInfo.used / usageInfo.limit) * 100, 100)}%` }}
-                                    ></div>
-                                </div>
-                                {usageInfo.remaining <= 0 ? (
-                                    <p className="text-xs text-red-600">
-                                        Has alcanzado tu límite de DTEs este mes. Considera actualizar tu plan.
-                                    </p>
-                                ) : (
-                                    <p className="text-xs text-gray-600">
-                                        Te quedan {usageInfo.remaining} DTEs en tu plan actual este mes.
-                                    </p>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Se removió la tarjeta de último paquete para simplificar la vista */}
-                    </div>
-                </div>
+                )}
             </div>
-        </Layout>
+        </div>
     );
 };
 

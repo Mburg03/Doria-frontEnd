@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { Download, Clock, FileText, RefreshCw, BarChart2 } from 'lucide-react';
@@ -59,17 +58,17 @@ const Packages = () => {
 
   if (user?.role === 'viewer') {
     return (
-      <Layout>
+      <>
         <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Paquetes</h1>
           <p className="text-gray-600">Tu cuenta es de solo visualización. Solicita acceso básico para ver y descargar paquetes.</p>
         </div>
-      </Layout>
+      </>
     );
   }
 
   return (
-    <Layout>
+    <>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Paquetes</h1>
@@ -230,7 +229,7 @@ const Packages = () => {
           </div>
         </div>
       )}
-    </Layout>
+    </>
   );
 };
 
@@ -361,7 +360,7 @@ const SimpleBarChart = ({ data, planLimit }) => {
               if (item?.label) parts.push(`Rango: ${item.label}`);
               if (item?.email) parts.push(`Cuenta: ${item.email}`);
               return parts.join(' · ') || `Fecha: ${label}`;
-            }}  
+            }}
           />
           {planLimit && <ReferenceLine y={planLimit} stroke="#94a3b8" strokeDasharray="4 4" label={{ value: `Límite ${planLimit}`, position: 'insideTopRight', fontSize: 11 }} />}
           <Bar dataKey="dtes" fill="#3b82f6" radius={[4, 4, 0, 0]} />

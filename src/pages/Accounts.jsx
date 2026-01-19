@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import Layout from '../components/Layout';
 import api from '../services/api';
 import { RefreshCw, Loader2, RefreshCcw, CheckCircle2 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, YAxis } from 'recharts';
@@ -66,7 +65,7 @@ const Accounts = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestionar cuentas</h1>
@@ -100,11 +99,11 @@ const Accounts = () => {
             className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" className="h-4 w-4">
-              <path fill="#EA4335" d="M24 9.5c3.23 0 5.44 1.4 6.68 2.57l4.87-4.78C32.67 4.2 28.78 2.5 24 2.5 14.82 2.5 7.09 8.73 4.66 17.1l5.96 4.63C11.77 14.86 17.25 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.5 24.5c0-1.47-.13-2.89-.38-4.25H24v8.05h12.65c-.55 2.95-2.19 5.46-4.67 7.15l7.36 5.7C43.72 36.93 46.5 31.23 46.5 24.5z"/>
-              <path fill="#FBBC05" d="M10.62 28.23A14.8 14.8 0 0 1 9.5 24c0-1.47.25-2.9.69-4.23l-5.96-4.63A21.95 21.95 0 0 0 2 24c0 3.53.84 6.87 2.33 9.86l6.29-5.63z"/>
-              <path fill="#34A853" d="M24 46.5c5.94 0 10.93-1.95 14.58-5.3l-7.36-5.7c-2.06 1.39-4.69 2.2-7.22 2.2-6.75 0-12.46-4.56-14.5-10.87l-6.29 5.63C7.09 39.27 14.82 46.5 24 46.5z"/>
-              <path fill="none" d="M2 2h44v44H2z"/>
+              <path fill="#EA4335" d="M24 9.5c3.23 0 5.44 1.4 6.68 2.57l4.87-4.78C32.67 4.2 28.78 2.5 24 2.5 14.82 2.5 7.09 8.73 4.66 17.1l5.96 4.63C11.77 14.86 17.25 9.5 24 9.5z" />
+              <path fill="#4285F4" d="M46.5 24.5c0-1.47-.13-2.89-.38-4.25H24v8.05h12.65c-.55 2.95-2.19 5.46-4.67 7.15l7.36 5.7C43.72 36.93 46.5 31.23 46.5 24.5z" />
+              <path fill="#FBBC05" d="M10.62 28.23A14.8 14.8 0 0 1 9.5 24c0-1.47.25-2.9.69-4.23l-5.96-4.63A21.95 21.95 0 0 0 2 24c0 3.53.84 6.87 2.33 9.86l6.29-5.63z" />
+              <path fill="#34A853" d="M24 46.5c5.94 0 10.93-1.95 14.58-5.3l-7.36-5.7c-2.06 1.39-4.69 2.2-7.22 2.2-6.75 0-12.46-4.56-14.5-10.87l-6.29 5.63C7.09 39.27 14.82 46.5 24 46.5z" />
+              <path fill="none" d="M2 2h44v44H2z" />
             </svg>
             Añadir cuenta de Gmail
           </button>
@@ -192,7 +191,7 @@ const Accounts = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </>
   );
 };
 

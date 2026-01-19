@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { RefreshCw, Trash2, Loader2, Eye, KeyRound } from 'lucide-react';
@@ -17,12 +16,12 @@ const AdminUsers = () => {
 
   if (user?.role !== 'admin') {
     return (
-      <Layout>
+      <>
         <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Administración</h1>
           <p className="text-gray-600">No tienes permisos para esta sección.</p>
         </div>
-      </Layout>
+      </>
     );
   }
 
@@ -126,7 +125,7 @@ const AdminUsers = () => {
   };
 
   return (
-    <Layout>
+    <>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Administración de Usuarios</h1>
@@ -275,7 +274,7 @@ const AdminUsers = () => {
           )}
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

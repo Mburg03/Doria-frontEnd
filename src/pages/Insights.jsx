@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import Layout from '../components/Layout';
 import {
   fetchAnnulled,
   fetchInsightsStats,
   fetchProducts,
-  fetchProviders
+  fetchProviders,
+  downloadOriginalPdf
 } from '../services/insightsService';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { getDefaultRange } from '../utils/dateRange';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Calendar } from 'lucide-react';
+import { Calendar, Building2, ChevronRight, TrendingUp, TrendingDown, Box, History, FileText, PieChart as PieChartIcon, ShieldAlert, RefreshCw, Search, Download } from 'lucide-react';
+import clsx from 'clsx';
 import SearchInput from '../components/SearchInput';
+import { exportToCSV } from '../utils/csvExport';
 import AnalyticsSummaryGrid from '../components/insights/AnalyticsSummaryGrid';
 import DailySpendChart from '../components/insights/DailySpendChart';
 import ProviderSidebar from '../components/modals/ProviderSidebar';
@@ -47,6 +49,7 @@ const Insights = () => {
   const [annulledLoading, setAnnulledLoading] = useState(false);
   const [providerQuery, setProviderQuery] = useState('');
   const [productQuery, setProductQuery] = useState('');
+  const [selectedProviderFilter, setSelectedProviderFilter] = useState('all');
   const debouncedProviderQuery = useDebouncedValue(providerQuery);
   const debouncedProductQuery = useDebouncedValue(productQuery);
 
@@ -77,10 +80,13 @@ const Insights = () => {
     }
   };
 
-  const loadProducts = async (startDate, endDate) => {
+  const loadProducts = async (startDate, endDate, nit = 'all') => {
     setProductsLoading(true);
     try {
-      const data = await fetchProducts({ startDate, endDate });
+      const params = { startDate, endDate };
+      if (nit !== 'all') params.nit = nit;
+
+      const data = await fetchProducts(params);
       setProducts(data.items || []);
     } catch (err) {
       setError(err?.message || 'No se pudo cargar el listado de productos.');
@@ -112,8 +118,13 @@ const Insights = () => {
     setAnnulledPage(1);
     loadStats(dateRange.startDate, dateRange.endDate);
     loadProviders(dateRange.startDate, dateRange.endDate);
-    loadProducts(dateRange.startDate, dateRange.endDate);
+    // Note: loadProducts is now handled by its own useEffect to avoid redundant calls
   }, [dateRange.startDate, dateRange.endDate]);
+
+  useEffect(() => {
+    if (!dateRange.startDate || !dateRange.endDate) return;
+    loadProducts(dateRange.startDate, dateRange.endDate, selectedProviderFilter);
+  }, [dateRange.startDate, dateRange.endDate, selectedProviderFilter]);
 
   useEffect(() => {
     if (!dateRange.startDate || !dateRange.endDate) return;
@@ -141,12 +152,35 @@ const Insights = () => {
   const filteredProducts = useMemo(() => {
     const term = debouncedProductQuery.trim().toLowerCase();
     if (!term) return products;
+
     return products.filter((product) => {
       const descriptionMatch = product.descripcion?.toLowerCase().includes(term);
       const codeMatch = product.codigo?.toLowerCase().includes(term);
       return descriptionMatch || codeMatch;
     });
   }, [products, debouncedProductQuery]);
+
+  const handleExportProviders = () => {
+    const headers = [
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'nit', label: 'NIT' },
+      { key: 'documents', label: 'Documentos' },
+      { key: 'total', label: 'Inversion Total' }
+    ];
+    exportToCSV(filteredProviders, `doria_proveedores_${dateRange.startDate}_a_${dateRange.endDate}`, headers);
+  };
+
+  const handleExportProducts = () => {
+    const headers = [
+      { key: 'descripcion', label: 'Descripcion' },
+      { key: 'codigo', label: 'Codigo' },
+      { key: 'quantity', label: 'Cantidad' },
+      { key: 'priceMin', label: 'Precio Min' },
+      { key: 'priceMax', label: 'Precio Max' },
+      { key: 'totalNet', label: 'Inversion Total' }
+    ];
+    exportToCSV(filteredProducts, `doria_productos_${dateRange.startDate}_a_${dateRange.endDate}`, headers);
+  };
 
   const getPriceTrendClass = (minPrice, maxPrice, firstPrice, lastPrice) => {
     if (firstPrice !== null && lastPrice !== null) {
@@ -176,51 +210,53 @@ const Insights = () => {
   const annulledPages = Math.max(Math.ceil(annulledTotal / annulledLimit), 1);
 
   return (
-    <Layout>
+    <>
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Inteligencia de Datos</h1>
-          <p className="text-gray-500">Análisis de gastos e IVA por rango de fechas.</p>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Inteligencia de Datos</h1>
+          <p className="text-xs text-gray-400 font-medium mt-1">Análisis de gastos e IVA por rango de fechas.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
-          <Calendar size={18} className="text-gray-400" />
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-100 rounded-xl px-2.5 py-1.5 shadow-sm">
+          <Calendar size={16} className="text-gray-400" />
+          <div className="flex items-center gap-1.5">
             <input
               type="date"
               value={dateRange.startDate}
               max={new Date().toISOString().slice(0, 10)}
               onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
-              className="text-sm border-none focus:ring-0"
+              className="text-xs border-none focus:ring-0 p-0 font-bold text-gray-700 bg-transparent"
             />
-            <span className="text-gray-300">—</span>
+            <span className="text-gray-300 font-bold">—</span>
             <input
               type="date"
               value={dateRange.endDate}
               max={new Date().toISOString().slice(0, 10)}
               onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
-              className="text-sm border-none focus:ring-0"
+              className="text-xs border-none focus:ring-0 p-0 font-bold text-gray-700 bg-transparent"
             />
           </div>
         </div>
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-3">
+      <div className="mb-8 flex flex-wrap gap-8 border-b border-gray-50 pb-px">
         {[
-          { id: 'resumen', label: 'Resumen general' },
-          { id: 'proveedores', label: 'Mis proveedores' },
+          { id: 'resumen', label: 'Resumen' },
+          { id: 'proveedores', label: 'Proveedores' },
           { id: 'productos', label: 'Productos' }
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition ${
-              activeTab === tab.id
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}
+            className={`pb-3 text-xs font-bold transition-all relative ${activeTab === tab.id
+              ? 'text-gray-900'
+              : 'text-gray-400 hover:text-gray-600'
+              }`}
           >
             {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+            )}
           </button>
         ))}
       </div>
@@ -238,21 +274,28 @@ const Insights = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <DailySpendChart series={series} />
 
-            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribución por proveedor</h3>
-              <div className="h-64">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm flex flex-col">
+              <h3 className="text-sm font-black uppercase text-gray-400 tracking-widest mb-6">
+                Distribución por proveedor
+              </h3>
+              <div className="flex-1 min-h-[256px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={pieData}
                       dataKey="value"
                       nameKey="name"
-                      innerRadius={50}
+                      innerRadius={60}
                       outerRadius={90}
-                      paddingAngle={3}
+                      paddingAngle={4}
+                      strokeWidth={0}
                     >
                       {pieData.map((entry, index) => (
-                        <Cell key={`slice-${entry.name}`} fill={COLORS[index % COLORS.length]} />
+                        <Cell
+                          key={`slice-${entry.name}`}
+                          fill={COLORS[index % COLORS.length]}
+                          className="hover:opacity-80 transition-opacity cursor-pointer"
+                        />
                       ))}
                     </Pie>
                     <Tooltip content={<ProviderTooltip />} />
@@ -260,80 +303,119 @@ const Insights = () => {
                 </ResponsiveContainer>
               </div>
               {!pieData.length && (
-                <p className="text-xs text-gray-500">Sin datos para mostrar.</p>
+                <div className="text-center py-12 text-gray-400 italic text-sm">
+                  Sin datos suficientes para graficar.
+                </div>
+              )}
+              {pieData.length > 0 && (
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {pieData.map((item, index) => (
+                    <div key={item.name} className="flex items-center gap-2 text-[10px] text-gray-600">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                      <span className="truncate">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="bg-white/80 backdrop-blur-md border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-6 py-5 border-b border-gray-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-white">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Documentos anulados</h3>
+                <h3 className="text-sm font-black uppercase text-gray-400 tracking-widest mb-1.5">
+                  Documentos anulados
+                </h3>
                 <p className="text-sm text-gray-500">
-                  Total en el rango: {formatNumber(annulledTotal)}
+                  Total en el rango: <span className="font-semibold text-gray-900">{formatNumber(annulledTotal)}</span>
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3 bg-gray-50 p-1 rounded-xl border border-gray-100">
                 <button
                   type="button"
                   onClick={() => setAnnulledPage((prev) => Math.max(prev - 1, 1))}
                   disabled={annulledPage === 1 || annulledLoading}
-                  className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50"
+                  className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-all"
                 >
-                  Anterior
+                  <ChevronRight size={20} className="rotate-180" />
                 </button>
-                <span className="text-sm text-gray-500">
+                <span className="text-xs font-bold text-gray-600 px-2 min-w-[60px] text-center">
                   {annulledPage} / {annulledPages}
                 </span>
                 <button
                   type="button"
                   onClick={() => setAnnulledPage((prev) => Math.min(prev + 1, annulledPages))}
                   disabled={annulledPage >= annulledPages || annulledLoading}
-                  className="px-3 py-1.5 text-sm border rounded-lg disabled:opacity-50"
+                  className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-all"
                 >
-                  Siguiente
+                  <ChevronRight size={20} />
                 </button>
               </div>
             </div>
 
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full table-fixed text-sm">
-                <thead className="text-xs uppercase text-gray-500 border-b">
-                  <tr>
-                    <th className="py-2 px-3 text-center w-36">Fecha emisión</th>
-                    <th className="py-2 px-3 text-center w-[360px]">Proveedor</th>
-                    <th className="py-2 px-3 text-center w-28">IVA</th>
-                    <th className="py-2 px-3 text-center w-32">Total</th>
-                    <th className="py-2 px-3 text-center w-36">Fecha anulación</th>
-                    <th className="py-2 px-3 text-center">Motivo</th>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50/50">
+                    <th className="py-3 px-6 text-left text-[10px] uppercase tracking-wider font-bold text-gray-400">Emisión</th>
+                    <th className="py-3 px-6 text-left text-[10px] uppercase tracking-wider font-bold text-gray-400">Proveedor</th>
+                    <th className="py-3 px-6 text-right text-[10px] uppercase tracking-wider font-bold text-gray-400">IVA</th>
+                    <th className="py-3 px-6 text-right text-[10px] uppercase tracking-wider font-bold text-gray-400">Total</th>
+                    <th className="py-3 px-6 text-left text-[10px] uppercase tracking-wider font-bold text-gray-400">Anulación</th>
+                    <th className="py-3 px-6 text-left text-[10px] uppercase tracking-wider font-bold text-gray-400">Motivo</th>
+                    <th className="py-3 px-6 text-center text-[10px] uppercase tracking-wider font-bold text-gray-400">PDF</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {annulledLoading && (
+                <tbody className="divide-y divide-gray-100">
+                  {annulledLoading ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-gray-500">
-                        Cargando anulados...
+                      <td colSpan={7} className="py-12 text-center text-gray-500">
+                        <RefreshCw size={24} className="animate-spin text-blue-500 mx-auto mb-2" />
+                        <p>Cargando documentos anulados...</p>
                       </td>
                     </tr>
-                  )}
-                  {!annulledLoading && annulledItems.length === 0 && (
+                  ) : annulledItems.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-gray-500">
-                        No hay documentos anulados en este rango.
+                      <td colSpan={7} className="py-12 text-center text-gray-500">
+                        <p>No hay documentos anulados en este rango.</p>
                       </td>
                     </tr>
-                  )}
-                  {!annulledLoading &&
+                  ) : (
                     annulledItems.map((item, index) => (
-                      <tr key={`${item.numeroControl}-${index}`} className="text-gray-700">
-                        <td className="py-2 px-3 text-center whitespace-nowrap">{item.fechaEmision || '—'}</td>
-                        <td className="py-2 px-3 text-center break-words">{item.emisorNombre || '—'}</td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">{formatCurrency(item.iva)}</td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">{formatCurrency(item.total)}</td>
-                        <td className="py-2 px-3 text-center whitespace-nowrap">{item.anulacionFecha || '—'}</td>
-                        <td className="py-2 px-3 text-center break-words">{item.anulacionMotivo || '—'}</td>
+                      <tr key={`${item.numeroControl}-${index}`} className="text-gray-700 hover:bg-gray-50/50 transition-colors">
+                        <td className="py-2.5 px-6 whitespace-nowrap font-medium text-xs">{item.fechaEmision || '—'}</td>
+                        <td className="py-2.5 px-6 max-w-[200px]">
+                          <div className="font-bold text-gray-900 line-clamp-1 text-xs">{item.emisorNombre || '—'}</div>
+                        </td>
+                        <td className="py-2.5 px-6 text-right whitespace-nowrap font-mono text-xs">{formatCurrency(item.iva)}</td>
+                        <td className="py-2.5 px-6 text-right whitespace-nowrap font-bold text-gray-900 font-mono text-xs">{formatCurrency(item.total)}</td>
+                        <td className="py-2.5 px-6 whitespace-nowrap text-red-600 font-medium text-xs">{item.anulacionFecha || '—'}</td>
+                        <td className="py-2.5 px-6">
+                          <p className="text-[10px] text-gray-500 line-clamp-1 italic">{item.anulacionMotivo || '—'}</p>
+                        </td>
+                        <td className="py-2.5 px-6 text-center">
+                          {item.originalAvailable ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await downloadOriginalPdf(item.codigoGeneracion);
+                                } catch (err) {
+                                  alert(err.message);
+                                }
+                              }}
+                              className="inline-flex items-center justify-center p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                              title="Ver PDF"
+                            >
+                              <FileText size={16} />
+                            </button>
+                          ) : (
+                            <span className="text-gray-300 text-xs">N/A</span>
+                          )}
+                        </td>
                       </tr>
-                    ))}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -344,32 +426,32 @@ const Insights = () => {
       {activeTab === 'proveedores' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">Mayor proveedor por monto</p>
-              <p className="text-sm font-semibold text-gray-900 mt-2">
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
+              <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1.5">Mayor proveedor por monto</p>
+              <h4 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">
                 {topByAmount?.nombre || '—'}
-              </p>
-              <p className="text-lg font-bold text-gray-900 mt-1">
+              </h4>
+              <p className="text-lg font-extrabold text-blue-600">
                 {topByAmount ? formatCurrency(topByAmount.total) : '—'}
               </p>
             </div>
-            
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">Mayor proveedor por IVA</p>
-              <p className="text-sm font-semibold text-gray-900 mt-2">
+
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
+              <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1.5">Mayor proveedor por IVA</p>
+              <h4 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">
                 {topByIva?.nombre || '—'}
-              </p>
-              <p className="text-lg font-bold text-gray-900 mt-1">
+              </h4>
+              <p className="text-lg font-extrabold text-indigo-600">
                 {topByIva ? formatCurrency(topByIva.iva) : '—'}
               </p>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-              <p className="text-xs uppercase text-gray-500">Mayor proveedor por frecuencia</p>
-              <p className="text-sm font-semibold text-gray-900 mt-2">
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm relative overflow-hidden group hover:border-blue-200 transition-all">
+              <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1.5">Mayor frecuencia</p>
+              <h4 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">
                 {topByDocs?.nombre || '—'}
-              </p>
-              <p className="text-lg font-bold text-gray-900 mt-1">
+              </h4>
+              <p className="text-lg font-extrabold text-emerald-600">
                 {topByDocs ? `${topByDocs.documents} DTE` : '—'}
               </p>
             </div>
@@ -381,21 +463,39 @@ const Insights = () => {
                 <h3 className="text-lg font-semibold text-gray-900">Proveedores</h3>
                 <p className="text-sm text-gray-500">Ordenados por gasto total.</p>
               </div>
-              <SearchInput
-                value={providerQuery}
-                onChange={setProviderQuery}
-                placeholder="Buscar proveedor"
-              />
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <button
+                  onClick={handleExportProviders}
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-100 text-gray-600 text-[10px] font-black uppercase rounded-xl hover:bg-gray-50 transition-all shadow-sm"
+                >
+                  <Download size={14} />
+                  Exportar CSV
+                </button>
+                <SearchInput
+                  value={providerQuery}
+                  onChange={setProviderQuery}
+                  placeholder="Buscar proveedor"
+                />
+              </div>
             </div>
 
             {providersLoading ? (
-              <div className="p-6 text-gray-500">Cargando proveedores...</div>
+              <div className="p-12 flex flex-col items-center justify-center text-gray-500">
+                <RefreshCw size={32} className="animate-spin text-blue-500 mb-4" />
+                <p>Cargando proveedores...</p>
+              </div>
             ) : providers.length === 0 ? (
-              <div className="p-6 text-gray-500">No hay proveedores en el rango seleccionado.</div>
+              <div className="p-12 text-center text-gray-500">
+                <Building2 size={48} className="mx-auto text-gray-300 mb-4" />
+                <p>No hay proveedores en el rango seleccionado.</p>
+              </div>
             ) : filteredProviders.length === 0 ? (
-              <div className="p-6 text-gray-500">No hay proveedores que coincidan.</div>
+              <div className="p-12 text-center text-gray-500">
+                <Search size={48} className="mx-auto text-gray-300 mb-4" />
+                <p>No hay proveedores que coincidan con "{providerQuery}".</p>
+              </div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 bg-gray-50/20">
                 {filteredProviders.map((provider) => (
                   <button
                     key={`${provider.nit}-${provider.nombre}`}
@@ -404,16 +504,35 @@ const Insights = () => {
                       setSelectedProduct(null);
                       setSelectedProvider(provider);
                     }}
-                    className="w-full text-left px-6 py-4 hover:bg-gray-50 transition"
+                    className="group bg-white border border-gray-100 rounded-2xl p-4 text-left hover:border-blue-400 hover:shadow-xl hover:shadow-blue-500/5 transition-all duration-300 relative overflow-hidden"
                   >
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_140px] md:items-center">
-                      <div>
-                        <p className="font-semibold text-gray-900">{provider.nombre}</p>
-                        <p className="text-xs text-gray-500">NIT: {provider.nit || '—'}</p>
-                      </div>
-                      <div className="text-sm text-gray-600 text-center">{provider.documents} DTE</div>
-                      <div className="text-sm text-center font-semibold text-gray-900">
-                        {formatCurrency(provider.total)}
+                    <div className="relative z-10">
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h4 className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors truncate text-sm">
+                            {provider.nombre}
+                          </h4>
+                          <span className="shrink-0 px-2 py-0.5 rounded-lg text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-100/50 uppercase">
+                            {provider.documents} DTE
+                          </span>
+                        </div>
+
+                        <p className="text-[10px] text-gray-400 font-medium mb-4">
+                          NIT: {provider.nit || '—'}
+                        </p>
+
+                        <div className="flex items-end justify-between">
+                          <div>
+                            <p className="text-[9px] uppercase font-black text-gray-400 tracking-wider mb-0.5">Inversión Total</p>
+                            <p className="text-base font-extrabold text-gray-900 group-hover:text-blue-600 transition-colors">
+                              {formatCurrency(provider.total)}
+                            </p>
+                          </div>
+                          <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 transform translate-x-1 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300">
+                            <ChevronRight size={14} />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </button>
@@ -430,70 +549,133 @@ const Insights = () => {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Productos</h3>
               <p className="text-sm text-gray-500">
-                Top productos por monto con variación de precio unitario.
+                Por monto con variación de precio unitario.
               </p>
             </div>
-            <SearchInput
-              value={productQuery}
-              onChange={setProductQuery}
-              placeholder="Buscar producto"
-            />
+            <div className="flex flex-col sm:flex-row gap-4 items-center">
+              <button
+                onClick={handleExportProducts}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-100 text-gray-600 text-[10px] font-black uppercase rounded-xl hover:bg-gray-50 transition-all shadow-sm"
+              >
+                <Download size={14} />
+                Exportar CSV
+              </button>
+              <div className="relative min-w-[200px] w-full sm:w-auto">
+                <select
+                  value={selectedProviderFilter}
+                  onChange={(e) => setSelectedProviderFilter(e.target.value)}
+                  className="w-full appearance-none bg-gray-50 border border-gray-100 text-gray-700 text-xs font-bold rounded-xl pr-10 pl-4 py-2.5 focus:bg-white focus:border-blue-600 focus:ring-0 outline-none transition-all shadow-sm cursor-pointer"
+                >
+                  <option value="all">Todos los proveedores</option>
+                  {providers.map(p => (
+                    <option key={p.nit} value={p.nit}>{p.nombre}</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                  <ChevronRight size={14} className="rotate-90" />
+                </div>
+              </div>
+              <SearchInput
+                value={productQuery}
+                onChange={setProductQuery}
+                placeholder="Buscar producto"
+              />
+            </div>
           </div>
 
           {productsLoading ? (
-            <div className="p-6 text-gray-500">Cargando productos...</div>
+            <div className="p-12 flex flex-col items-center justify-center text-gray-500">
+              <RefreshCw size={32} className="animate-spin text-blue-500 mb-4" />
+              <p>Cargando productos...</p>
+            </div>
           ) : products.length === 0 ? (
-            <div className="p-6 text-gray-500">No hay productos en el rango seleccionado.</div>
+            <div className="p-12 text-center text-gray-500">
+              <Box size={48} className="mx-auto text-gray-300 mb-4" />
+              <p>No hay productos en el rango seleccionado.</p>
+            </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="p-6 text-gray-500">No hay productos que coincidan.</div>
+            <div className="p-12 text-center text-gray-500">
+              <Search size={48} className="mx-auto text-gray-300 mb-4" />
+              <p>No hay productos que coincidan con "{productQuery}".</p>
+            </div>
           ) : (
-            <div className="p-6 overflow-x-auto">
-              <table className="min-w-full table-fixed text-sm">
-                <thead className="text-xs uppercase text-gray-500">
-                  <tr>
-                    <th className="text-left pb-3 px-3 w-[360px]">Producto</th>
-                    <th className="text-center pb-3 px-3 w-28">Cantidad</th>
-                    <th className="text-center pb-3 px-3 w-32">Total</th>
-                    <th className="text-center pb-3 px-3 w-40">Variación</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredProducts.map((product) => (
-                    <tr
-                      key={`${product.codigo}-${product.descripcion}`}
-                      className="text-gray-700 hover:bg-gray-50 cursor-pointer"
-                      onClick={() => {
-                        setSelectedProvider(null);
-                        setSelectedProduct(product);
-                      }}
-                    >
-                      <td className="py-3 px-3">
-                        <div className="font-medium text-gray-900 truncate">
-                          {product.descripcion || 'Sin descripción'}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3 text-center">{formatNumber(product.quantity || 0)}</td>
-                      <td
-                        className={`py-3 px-3 text-center font-semibold ${
-                          (product.totalNet ?? 0) < 0 ? 'text-red-600' : 'text-gray-900'
-                        }`}
-                      >
-                        {formatCurrency(product.totalNet ?? 0)}
-                      </td>
-                      <td
-                        className={`py-3 px-3 text-center ${getPriceTrendClass(
+            <div className="p-6 space-y-4 bg-gray-50/30">
+              {filteredProducts.map((product) => (
+                <button
+                  key={`${product.codigo}-${product.descripcion}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedProvider(null);
+                    setSelectedProduct(product);
+                  }}
+                  className="w-full group bg-white border border-gray-100 rounded-xl p-3 flex flex-col md:flex-row md:items-center gap-3 hover:border-blue-400 hover:shadow-lg transition-all text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <div className="p-1.5 bg-gray-50 rounded-lg text-gray-400 group-hover:text-blue-500 group-hover:bg-blue-50 transition-colors">
+                        <Box size={18} />
+                      </div>
+                      <h4 className="font-bold text-gray-900 group-hover:text-blue-700 transition-colors truncate text-sm">
+                        {product.descripcion || 'Sin descripción'}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-gray-500 ml-10 font-medium">
+                      <span className="flex items-center gap-1 uppercase tracking-tight">
+                        <History size={12} /> {formatNumber(product.quantity || 0)} und
+                      </span>
+                      {product.codigo && (
+                        <span className="shrink-0 px-2 py-0.5 rounded-lg text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-100/50 uppercase">
+                          REF: {product.codigo}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-6 md:ml-auto">
+                    <div className="text-right">
+                      <p className="text-[9px] uppercase tracking-wider text-gray-400 font-black mb-0.5">Rango Precio</p>
+                      <div className={clsx(
+                        "flex items-center gap-1.5 font-bold text-xs",
+                        getPriceTrendClass(
                           product.priceMin || 0,
                           product.priceMax || 0,
                           product.firstPrice ?? null,
                           product.lastPrice ?? null
-                        )}`}
-                      >
-                        {formatCurrency(product.priceMin)} – {formatCurrency(product.priceMax)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        )
+                      )}>
+                        {product.priceMin === product.priceMax ? (
+                          <span>{formatCurrency(product.priceMin)}</span>
+                        ) : (
+                          <>
+                            <span>{formatCurrency(product.priceMin)}</span>
+                            <span className="text-gray-200">—</span>
+                            <span>{formatCurrency(product.priceMax)}</span>
+                          </>
+                        )}
+                        {product.lastPrice > product.firstPrice ? (
+                          <TrendingUp size={14} className="text-red-500" />
+                        ) : product.lastPrice < product.firstPrice ? (
+                          <TrendingDown size={14} className="text-emerald-500" />
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="text-right min-w-[100px]">
+                      <p className="text-[9px] uppercase tracking-wider text-gray-400 font-bold mb-0.5">Inversión Total</p>
+                      <p className={clsx(
+                        "text-lg font-extrabold",
+                        (product.totalNet ?? 0) < 0 ? 'text-red-600' : 'text-gray-900'
+                      )}>
+                        {formatCurrency(product.totalNet ?? 0)}
+                      </p>
+                    </div>
+
+                    <div className="hidden md:block text-gray-300 group-hover:text-blue-400 transition-colors">
+                      <ChevronRight size={20} />
+                    </div>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -509,7 +691,7 @@ const Insights = () => {
         dateRange={dateRange}
         onClose={() => setSelectedProduct(null)}
       />
-    </Layout>
+    </>
   );
 };
 

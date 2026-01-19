@@ -1,9 +1,8 @@
-import Layout from '../components/Layout';
 import { Info } from 'lucide-react';
 
 const Settings = () => {
   return (
-    <Layout>
+    <>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Ajustes</h1>
@@ -25,7 +24,7 @@ const Settings = () => {
           </p>
         </div>
       </div>
-    </Layout>
+    </>
   );
 };
 

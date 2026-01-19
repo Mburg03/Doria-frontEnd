@@ -86,3 +86,18 @@ export const fetchProductDetail = async (params) => {
     throw normalizeError(error, 'No se pudo cargar el detalle del producto.', 'PRODUCT_DETAIL');
   }
 };
+
+export const downloadOriginalPdf = async (codigoGeneracion) => {
+  try {
+    const res = await api.get(`/insights/dte/${codigoGeneracion}/original`, {
+      responseType: 'blob'
+    });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    return true;
+  } catch (error) {
+    const message = error.response?.data?.message || 'No se pudo descargar el PDF original.';
+    throw new Error(message);
+  }
+};

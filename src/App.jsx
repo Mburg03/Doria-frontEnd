@@ -8,10 +8,10 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AdminUsers from './pages/AdminUsers';
 import Accounts from './pages/Accounts';
-import ProviderSearch from './pages/ProviderSearch';
 import Insights from './pages/Insights';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
+import Layout from './components/Layout';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -38,62 +38,22 @@ function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot" element={<ForgotPassword />} />
       <Route path="/reset" element={<ResetPassword />} />
+
+      {/* Protected Routes with Persistent Layout */}
       <Route
-        path="/"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <Layout />
           </ProtectedRoute>
         }
-      />
-      <Route
-        path="/packages"
-        element={
-          <ProtectedRoute>
-            <Packages />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/accounts"
-        element={
-          <ProtectedRoute>
-            <Accounts />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/provider-search"
-        element={
-          <ProtectedRoute>
-            <ProviderSearch />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/insights"
-        element={
-          <ProtectedRoute>
-            <Insights />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/admin/users"
-        element={
-          <ProtectedRoute>
-            <AdminUsers />
-          </ProtectedRoute>
-        }
-      />
+      >
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/packages" element={<Packages />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/accounts" element={<Accounts />} />
+        <Route path="/insights" element={<Insights />} />
+        <Route path="/admin/users" element={<AdminUsers />} />
+      </Route>
     </Routes>
   );
 }
