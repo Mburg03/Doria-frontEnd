@@ -17,8 +17,10 @@ import { formatCurrency, formatNumber } from '../utils/formatters';
 import { getDefaultRange } from '../utils/dateRange';
 import DailySpendChart from '../components/insights/DailySpendChart';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
-import { ArrowLeft, Package, PlusCircle, RefreshCw, Tag, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Package, PlusCircle, RefreshCw, Tag, Trash2, Users, ChevronRight, Search, X, TrendingUp, Calendar } from 'lucide-react';
 import ProductHistoryModal from '../components/insights/ProductHistoryModal';
+import Toast from '../components/Toast';
+import CategoryKPICard from '../components/insights/CategoryKPICard';
 
 const CategoryDetail = () => {
   const { id } = useParams();
@@ -48,6 +50,14 @@ const CategoryDetail = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedHistoryProduct, setSelectedHistoryProduct] = useState(null);
+
+  // Estados para feedback visual
+  const [assigningProvider, setAssigningProvider] = useState(false);
+  const [assigningProducts, setAssigningProducts] = useState(false);
+  const [removingProvider, setRemovingProvider] = useState(null);
+  const [removingProduct, setRemovingProduct] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const loadCategory = async () => {
     setCategoryError(null);
@@ -145,37 +155,67 @@ const CategoryDetail = () => {
 
   const handleAddProvider = async () => {
     if (!providerToAdd || !id) return;
+    setAssigningProvider(true);
     try {
       await addCategoryAssignments(id, { providerIds: [providerToAdd] });
+      setToast({ message: 'Proveedor agregado exitosamente', type: 'success' });
       setActiveProviderForProducts(providerToAdd);
       setSelectedProductIds([]);
       loadCategoryDetail();
       loadCategory();
     } catch (err) {
-      setCategoryError(err?.message || 'No se pudo asignar el proveedor.');
+      setToast({ message: err?.message || 'No se pudo asignar el proveedor.', type: 'error' });
+    } finally {
+      setAssigningProvider(false);
     }
   };
 
   const handleRemoveProvider = async (providerId) => {
     if (!id) return;
-    await removeCategoryAssignment(id, { providerId });
-    loadCategoryDetail();
-    loadCategory();
+    setRemovingProvider(providerId);
+    try {
+      await removeCategoryAssignment(id, { providerId });
+      setToast({ message: 'Proveedor eliminado exitosamente', type: 'success' });
+      loadCategoryDetail();
+      loadCategory();
+    } catch (err) {
+      setToast({ message: err?.message || 'No se pudo eliminar el proveedor.', type: 'error' });
+    } finally {
+      setRemovingProvider(null);
+      setConfirmDelete(null);
+    }
   };
 
   const handleAddProducts = async () => {
     if (!selectedProductIds.length || !id) return;
-    await addCategoryAssignments(id, { productIds: selectedProductIds });
-    setSelectedProductIds([]);
-    loadCategoryDetail();
-    loadCategory();
+    setAssigningProducts(true);
+    try {
+      await addCategoryAssignments(id, { productIds: selectedProductIds });
+      setToast({ message: `${selectedProductIds.length} producto(s) agregado(s) exitosamente`, type: 'success' });
+      setSelectedProductIds([]);
+      loadCategoryDetail();
+      loadCategory();
+    } catch (err) {
+      setToast({ message: err?.message || 'No se pudieron agregar los productos.', type: 'error' });
+    } finally {
+      setAssigningProducts(false);
+    }
   };
 
   const handleRemoveProduct = async (productId) => {
     if (!id) return;
-    await removeCategoryAssignment(id, { productId });
-    loadCategoryDetail();
-    loadCategory();
+    setRemovingProduct(productId);
+    try {
+      await removeCategoryAssignment(id, { productId });
+      setToast({ message: 'Producto eliminado exitosamente', type: 'success' });
+      loadCategoryDetail();
+      loadCategory();
+    } catch (err) {
+      setToast({ message: err?.message || 'No se pudo eliminar el producto.', type: 'error' });
+    } finally {
+      setRemovingProduct(null);
+      setConfirmDelete(null);
+    }
   };
 
   const totals = useMemo(() => ({
@@ -203,41 +243,53 @@ const CategoryDetail = () => {
 
   return (
     <>
-      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="animate-in fade-in slide-in-from-top-4 duration-700">
+      {/* Header con gradiente */}
+      <div className="relative overflow-hidden mb-6 -mx-6 -mt-6">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-indigo-50 opacity-50" />
+        <div className="relative px-6 py-8">
           <button
             type="button"
             onClick={() => navigate('/categories')}
-            className="inline-flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-blue-600 transition-colors mb-4"
           >
             <ArrowLeft size={14} />
-            Volver a categorias
+            Volver a categorías
           </button>
-          <div className="flex items-center gap-3 mt-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: selectedCategory.color }} />
-            <h1 className="text-3xl font-bold text-gray-900">{selectedCategory.name}</h1>
-          </div>
-          <p className="text-gray-400 mt-1 text-sm font-medium">
-            {selectedCategory.description || 'Analiza el rendimiento de esta categoria.'}
-          </p>
-        </div>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div
+                className="h-16 w-16 rounded-2xl shadow-lg flex items-center justify-center transform hover:scale-105 transition-transform"
+                style={{ backgroundColor: selectedCategory.color }}
+              >
+                <Tag size={32} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-black text-gray-900">{selectedCategory.name}</h1>
+                <p className="text-sm text-gray-500 mt-1 font-medium">
+                  {selectedCategory.description || 'Analiza el rendimiento de esta categoría.'}
+                </p>
+              </div>
+            </div>
 
-        <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-100 rounded-xl px-2.5 py-1.5 shadow-sm">
-          <input
-            type="date"
-            value={dateRange.startDate}
-            max={new Date().toISOString().slice(0, 10)}
-            onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
-            className="text-xs border-none focus:ring-0 p-0 font-bold text-gray-700 bg-transparent"
-          />
-          <span className="text-gray-300 font-bold">—</span>
-          <input
-            type="date"
-            value={dateRange.endDate}
-            max={new Date().toISOString().slice(0, 10)}
-            onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
-            className="text-xs border-none focus:ring-0 p-0 font-bold text-gray-700 bg-transparent"
-          />
+            <div className="flex flex-wrap items-center gap-2 bg-white/80 backdrop-blur-md border border-gray-100 rounded-xl px-3 py-2 shadow-sm">
+              <Calendar size={14} className="text-gray-400" />
+              <input
+                type="date"
+                value={dateRange.startDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setDateRange({ ...dateRange, startDate: e.target.value })}
+                className="text-xs border-none focus:ring-0 p-0 font-bold text-gray-700 bg-transparent"
+              />
+              <span className="text-gray-300 font-bold">—</span>
+              <input
+                type="date"
+                value={dateRange.endDate}
+                max={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setDateRange({ ...dateRange, endDate: e.target.value })}
+                className="text-xs border-none focus:ring-0 p-0 font-bold text-gray-700 bg-transparent"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -264,222 +316,299 @@ const CategoryDetail = () => {
 
       {activeTab === 'overview' && (
         <>
-          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Resumen</p>
-            <p className="text-xs text-gray-500 mt-1">KPIs del rango seleccionado.</p>
-          </div>
-          {detailLoading && <RefreshCw size={16} className="animate-spin text-gray-400" />}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-          {[
-            { label: 'Documentos', value: formatNumber(totals.documents), icon: Tag },
-            { label: 'Subtotal', value: formatCurrency(totals.subTotal), icon: Package },
-            { label: 'IVA', value: formatCurrency(totals.iva), icon: Package },
-            { label: 'Total', value: formatCurrency(totals.total), icon: Users }
-          ].map((card) => (
-            <div key={card.label} className="border border-gray-100 rounded-xl p-4 bg-gray-50/40">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-gray-400 font-black">
-                {card.label}
-                <card.icon size={14} />
-              </div>
-              <p className="text-lg font-bold text-gray-900 mt-2">{card.value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <DailySpendChart series={categorySeries} />
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Proveedores</p>
-            {categoryProviders.length === 0 ? (
-              <p className="text-xs text-gray-500 mt-3">Sin proveedores asignados.</p>
-            ) : (
-              <div className="mt-3 space-y-3">
-                {categoryProviders.map((provider) => (
-                  <div key={provider.providerId} className="flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-semibold text-gray-800">{provider.name}</p>
-                      <p className="text-[10px] text-gray-400">{provider.nit}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Productos</p>
-            {categoryProducts.length === 0 ? (
-              <p className="text-xs text-gray-500 mt-3">Sin productos asignados.</p>
-            ) : (
-              <div className="mt-3 space-y-3 max-h-64 overflow-y-auto pr-1">
-                {categoryProducts.map((product) => (
-                  <div key={product.productId} className="flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-semibold text-gray-800">{product.description}</p>
-                      <p className="text-[10px] text-gray-400">{product.code || 'Sin codigo'}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Asignar proveedor + productos</p>
-              <p className="text-xs text-gray-500 mt-1">Selecciona proveedor y agrega productos desde su catalogo.</p>
-            </div>
-            <Users size={16} className="text-gray-400" />
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3">
-            <select
-              value={providerToAdd}
-              onChange={(e) => setProviderToAdd(e.target.value)}
-              className="flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 focus:border-blue-500 focus:bg-white focus:ring-0"
-            >
-              <option value="">Selecciona proveedor</option>
-              {providersDirectory.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.name} {provider.nit ? `· ${provider.nit}` : ''}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleAddProvider}
-              disabled={!providerToAdd}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-black uppercase tracking-wider text-white hover:bg-blue-700 transition-all disabled:opacity-60"
-            >
-              <PlusCircle size={14} />
-              Agregar proveedor
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px] gap-3">
-            <input
-              type="text"
-              value={productQuery}
-              onChange={(e) => setProductQuery(e.target.value)}
-              placeholder="Buscar producto del proveedor"
-              className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+          {/* KPIs con glassmorphism */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <CategoryKPICard
+              label="Documentos"
+              value={formatNumber(totals.documents)}
+              icon={Tag}
+              loading={detailLoading}
             />
-            <button
-              type="button"
-              onClick={handleAddProducts}
-              disabled={!selectedProductIds.length}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-blue-100 text-blue-600 text-[10px] font-black uppercase tracking-wider hover:bg-blue-50 transition-all disabled:opacity-50"
-            >
-              <Package size={14} />
-              Agregar seleccion
-            </button>
+            <CategoryKPICard
+              label="Subtotal"
+              value={formatCurrency(totals.subTotal)}
+              icon={Package}
+              loading={detailLoading}
+            />
+            <CategoryKPICard
+              label="IVA"
+              value={formatCurrency(totals.iva)}
+              icon={Package}
+              loading={detailLoading}
+            />
+            <CategoryKPICard
+              label="Total"
+              value={formatCurrency(totals.total)}
+              icon={Users}
+              loading={detailLoading}
+            />
           </div>
 
-          {productLoading ? (
-            <p className="text-xs text-gray-400">Buscando productos...</p>
-          ) : productResults.length === 0 ? (
-            <p className="text-xs text-gray-500">
-              {!providerToAdd
-                ? 'Selecciona un proveedor para ver sus productos.'
-                : 'Sin resultados para este proveedor.'}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {productResults.map((product) => (
-                <div key={product.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-xs">
-                  <label className="flex items-center gap-3 flex-1">
-                    <input
-                      type="checkbox"
-                      checked={selectedProductIds.includes(product.id)}
-                      onChange={(e) => {
-                        setSelectedProductIds((prev) => {
-                          if (e.target.checked) return [...prev, product.id];
-                          return prev.filter((idValue) => idValue !== product.id);
-                        });
-                      }}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-0"
-                    />
-                    <p className="font-semibold text-gray-800">{product.description}</p>
-                    <p className="text-[10px] text-gray-400">{product.code || 'Sin codigo'}</p>
-                  </label>
+          {/* Gráfico mejorado con estadísticas */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm lg:col-span-2">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <TrendingUp size={18} className="text-blue-600" />
+                    Tendencia de Gasto
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Evolución diaria en el rango seleccionado
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Asignaciones actuales</p>
-              <p className="text-xs text-gray-500 mt-1">Proveedores y productos ya vinculados.</p>
-            </div>
-            <Tag size={16} className="text-gray-400" />
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black mb-2">Proveedores</p>
-              {providersLoading ? (
-                <p className="text-xs text-gray-400">Cargando proveedores...</p>
-              ) : categoryProviders.length === 0 ? (
-                <p className="text-xs text-gray-500">Sin proveedores asignados.</p>
-              ) : (
-                <div className="space-y-2">
-                  {categoryProviders.map((provider) => (
-                    <div key={provider.providerId} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-xs">
-                      <div>
-                        <p className="font-semibold text-gray-800">{provider.name}</p>
-                        <p className="text-[10px] text-gray-400">{provider.nit}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProvider(provider.providerId)}
-                        className="text-gray-300 hover:text-red-500"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
+                {detailLoading && <RefreshCw size={16} className="animate-spin text-blue-500" />}
+              </div>
+              <DailySpendChart series={categorySeries} />
+              {categorySeries.length > 0 && (
+                <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase text-gray-400 font-black">Promedio</p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">
+                      {formatCurrency(categorySeries.reduce((sum, s) => sum + s.total, 0) / categorySeries.length)}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase text-gray-400 font-black">Pico</p>
+                    <p className="text-sm font-bold text-blue-600 mt-1">
+                      {formatCurrency(Math.max(...categorySeries.map(s => s.total)))}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] uppercase text-gray-400 font-black">Mínimo</p>
+                    <p className="text-sm font-bold text-emerald-600 mt-1">
+                      {formatCurrency(Math.min(...categorySeries.map(s => s.total)))}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
+            <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Proveedores</p>
+                {categoryProviders.length === 0 ? (
+                  <p className="text-xs text-gray-500 mt-3">Sin proveedores asignados.</p>
+                ) : (
+                  <div className="mt-3 space-y-3">
+                    {categoryProviders.map((provider) => (
+                      <div key={provider.providerId} className="flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-semibold text-gray-800">{provider.name}</p>
+                          <p className="text-[10px] text-gray-400">{provider.nit}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Productos</p>
+                {categoryProducts.length === 0 ? (
+                  <p className="text-xs text-gray-500 mt-3">Sin productos asignados.</p>
+                ) : (
+                  <div className="mt-3 space-y-3 max-h-64 overflow-y-auto pr-1">
+                    {categoryProducts.map((product) => (
+                      <div key={product.productId} className="flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-semibold text-gray-800">{product.description}</p>
+                          <p className="text-[10px] text-gray-400">{product.code || 'Sin codigo'}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-            <div className="border-t border-gray-100 pt-3">
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black mb-2">Productos</p>
-              {categoryProducts.length === 0 ? (
-                <p className="text-xs text-gray-500">Sin productos asignados.</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+            <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Asignar proveedor + productos</p>
+                  <p className="text-xs text-gray-500 mt-1">Selecciona proveedor y agrega productos desde su catalogo.</p>
+                </div>
+                <Users size={16} className="text-gray-400" />
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <select
+                  value={providerToAdd}
+                  onChange={(e) => setProviderToAdd(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                >
+                  <option value="">Selecciona proveedor</option>
+                  {providersDirectory.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.name} {provider.nit ? `· ${provider.nit}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddProvider}
+                  disabled={!providerToAdd || assigningProvider}
+                  className="w-full rounded-xl bg-blue-600 px-4 py-3 text-xs font-black uppercase tracking-wider text-white shadow-lg hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    {assigningProvider ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Agregando...
+                      </>
+                    ) : (
+                      <>
+                        <PlusCircle size={14} />
+                        Agregar proveedor
+                      </>
+                    )}
+                  </div>
+                </button>
+              </div>
+
+              {/* Búsqueda de productos mejorada */}
+              <div className="space-y-3">
+                {activeProviderForProducts && (
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="h-6 w-6 rounded bg-blue-600 flex items-center justify-center text-white text-[10px] font-black">
+                      {providersDirectory.find(p => p.id === activeProviderForProducts)?.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <p className="text-xs font-semibold text-blue-900">
+                      Buscando en: {providersDirectory.find(p => p.id === activeProviderForProducts)?.name}
+                    </p>
+                  </div>
+                )}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={productQuery}
+                    onChange={(e) => setProductQuery(e.target.value)}
+                    placeholder="Buscar producto..."
+                    disabled={!activeProviderForProducts}
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700 focus:border-blue-500 focus:bg-white focus:ring-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  {productLoading && (
+                    <RefreshCw size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 animate-spin" />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddProducts}
+                  disabled={!selectedProductIds.length || assigningProducts}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl border-2 border-blue-100 bg-blue-50 text-blue-700 text-[10px] font-black uppercase tracking-wider hover:bg-blue-100 hover:border-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed leading-tight px-3 py-2.5"
+                >
+                  {assigningProducts ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Agregando...
+                    </>
+                  ) : (
+                    <>
+                      <Package size={14} />
+                      Agregar selección ({selectedProductIds.length})
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {productLoading ? (
+                <p className="text-xs text-gray-400">Buscando productos...</p>
+              ) : productResults.length === 0 ? (
+                <p className="text-xs text-gray-500">
+                  {!providerToAdd
+                    ? 'Selecciona un proveedor para ver sus productos.'
+                    : 'Sin resultados para este proveedor.'}
+                </p>
               ) : (
                 <div className="space-y-2">
-                  {categoryProducts.map((product) => (
-                    <div key={product.productId} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-xs">
-                      <div>
+                  {productResults.map((product) => (
+                    <div key={product.id} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-xs">
+                      <label className="flex items-center gap-3 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.includes(product.id)}
+                          onChange={(e) => {
+                            setSelectedProductIds((prev) => {
+                              if (e.target.checked) return [...prev, product.id];
+                              return prev.filter((idValue) => idValue !== product.id);
+                            });
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-0"
+                        />
                         <p className="font-semibold text-gray-800">{product.description}</p>
                         <p className="text-[10px] text-gray-400">{product.code || 'Sin codigo'}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveProduct(product.productId)}
-                        className="text-gray-300 hover:text-red-500"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      </label>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black">Asignaciones actuales</p>
+                  <p className="text-xs text-gray-500 mt-1">Proveedores y productos ya vinculados.</p>
+                </div>
+                <Tag size={16} className="text-gray-400" />
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black mb-2">Proveedores</p>
+                  {providersLoading ? (
+                    <p className="text-xs text-gray-400">Cargando proveedores...</p>
+                  ) : categoryProviders.length === 0 ? (
+                    <p className="text-xs text-gray-500">Sin proveedores asignados.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {categoryProviders.map((provider) => (
+                        <div key={provider.providerId} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-xs">
+                          <div>
+                            <p className="font-semibold text-gray-800">{provider.name}</p>
+                            <p className="text-[10px] text-gray-400">{provider.nit}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete({ type: 'provider', id: provider.providerId, name: provider.name })}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="text-[10px] uppercase tracking-widest text-gray-400 font-black mb-2">Productos</p>
+                  {categoryProducts.length === 0 ? (
+                    <p className="text-xs text-gray-500">Sin productos asignados.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {categoryProducts.map((product) => (
+                        <div key={product.productId} className="flex items-center justify-between rounded-xl border border-gray-100 px-3 py-2 text-xs">
+                          <div>
+                            <p className="font-semibold text-gray-800">{product.description}</p>
+                            <p className="text-[10px] text-gray-400">{product.code || 'Sin codigo'}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete({ type: 'product', id: product.productId, name: product.description })}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
         </>
       )}
 
@@ -548,6 +677,63 @@ const CategoryDetail = () => {
         providerId={selectedHistoryProduct?.providerId || null}
         onClose={() => setSelectedHistoryProduct(null)}
       />
+
+      {/* Modal de confirmación para eliminar */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Confirmar eliminación</h3>
+                <p className="text-sm text-gray-500">Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-6">
+              ¿Estás seguro de eliminar <span className="font-bold">{confirmDelete.name}</span>?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="flex-1 px-4 py-2 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (confirmDelete.type === 'provider') {
+                    await handleRemoveProvider(confirmDelete.id);
+                  } else {
+                    await handleRemoveProduct(confirmDelete.id);
+                  }
+                }}
+                disabled={removingProvider || removingProduct}
+                className="flex-1 px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {(removingProvider || removingProduct) ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  'Eliminar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast de notificaciones */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </>
   );
 };
