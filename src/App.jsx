@@ -9,6 +9,9 @@ import ResetPassword from './pages/ResetPassword';
 import AdminUsers from './pages/AdminUsers';
 import Accounts from './pages/Accounts';
 import Insights from './pages/Insights';
+import ProviderDetails from './pages/ProviderDetails';
+import Categories from './pages/Categories';
+import CategoryDetail from './pages/CategoryDetail';
 import { useAuth } from './context/AuthContext';
 import { Loader2 } from 'lucide-react';
 import Layout from './components/Layout';
@@ -52,6 +55,10 @@ function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/insights" element={<Insights />} />
+        <Route path="/categories" element={<Categories />} />
+        <Route path="/categories/:id" element={<CategoryDetail />} />
+        {/* Fase 4: Detalle de Proveedor (Inteligencia) */}
+        <Route path="/insights/provider/:id" element={<ProviderDetails />} />
         <Route path="/admin/users" element={<AdminUsers />} />
       </Route>
     </Routes>

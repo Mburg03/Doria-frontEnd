@@ -3,13 +3,15 @@ import {
   fetchAnnulled,
   fetchInsightsStats,
   fetchProducts,
+  fetchProductsByProvider,
   fetchProviders,
   downloadOriginalPdf
 } from '../services/insightsService';
+import { createManualTransaction, fetchManualProviders } from '../services/manualService';
 import { formatCurrency, formatNumber } from '../utils/formatters';
 import { getDefaultRange } from '../utils/dateRange';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { Calendar, Building2, ChevronRight, TrendingUp, TrendingDown, Box, History, FileText, PieChart as PieChartIcon, ShieldAlert, RefreshCw, Search, Download } from 'lucide-react';
+import { Calendar, Building2, ChevronRight, TrendingUp, TrendingDown, Box, History, FileText, ShieldAlert, RefreshCw, Search, Download, Receipt, PlusCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import SearchInput from '../components/SearchInput';
 import { exportToCSV } from '../utils/csvExport';
@@ -55,6 +57,29 @@ const Insights = () => {
 
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [manualProviders, setManualProviders] = useState([]);
+  const [manualProvidersLoading, setManualProvidersLoading] = useState(false);
+  const [manualProvidersLoaded, setManualProvidersLoaded] = useState(false);
+  const [manualProviderMode, setManualProviderMode] = useState('existing');
+  const [manualProviderId, setManualProviderId] = useState('');
+  const [manualProviderName, setManualProviderName] = useState('');
+  const [manualProviderNit, setManualProviderNit] = useState('');
+  const [manualProviderCommercialName, setManualProviderCommercialName] = useState('');
+  const [manualProviderEmail, setManualProviderEmail] = useState('');
+  const [manualDocumentType, setManualDocumentType] = useState('Factura Física');
+  const [manualControlNumber, setManualControlNumber] = useState('');
+  const [manualIssueDate, setManualIssueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [manualCurrency, setManualCurrency] = useState('');
+  const [manualSubTotal, setManualSubTotal] = useState('');
+  const [manualIva, setManualIva] = useState('');
+  const [manualTotal, setManualTotal] = useState('');
+  const [manualNotes, setManualNotes] = useState('');
+  const [manualItems, setManualItems] = useState([]);
+  const [manualProviderProducts, setManualProviderProducts] = useState([]);
+  const [manualProviderProductsLoading, setManualProviderProductsLoading] = useState(false);
+  const [manualProductQuery, setManualProductQuery] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualFeedback, setManualFeedback] = useState(null);
 
   const loadStats = async (startDate, endDate) => {
     setStatsLoading(true);
@@ -112,6 +137,42 @@ const Insights = () => {
     }
   };
 
+  const loadManualProviders = async () => {
+    setManualProvidersLoading(true);
+    try {
+      const data = await fetchManualProviders();
+      setManualProviders(data);
+    } catch (err) {
+      setManualFeedback({
+        type: 'error',
+        message: err?.message || 'No se pudieron cargar los proveedores.'
+      });
+    } finally {
+      setManualProvidersLoading(false);
+      setManualProvidersLoaded(true);
+    }
+  };
+
+  const loadManualProviderProducts = async (nit) => {
+    if (!nit) {
+      setManualProviderProducts([]);
+      return;
+    }
+    setManualProviderProductsLoading(true);
+    try {
+      const data = await fetchProductsByProvider({
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate,
+        nit
+      });
+      setManualProviderProducts(data.items || []);
+    } catch (err) {
+      setManualProviderProducts([]);
+    } finally {
+      setManualProviderProductsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!dateRange.startDate || !dateRange.endDate) return;
     setError(null);
@@ -130,6 +191,34 @@ const Insights = () => {
     if (!dateRange.startDate || !dateRange.endDate) return;
     loadAnnulled(dateRange.startDate, dateRange.endDate, annulledPage);
   }, [dateRange.startDate, dateRange.endDate, annulledPage]);
+
+  useEffect(() => {
+    if (activeTab !== 'manual') return;
+    if (manualProvidersLoaded || manualProvidersLoading) return;
+    loadManualProviders();
+  }, [activeTab, manualProvidersLoaded, manualProvidersLoading]);
+
+  useEffect(() => {
+    if (activeTab !== 'manual') return;
+    if (manualProviderMode !== 'existing' || !manualProviderId) {
+      setManualProviderProducts([]);
+      setManualProductQuery('');
+      return;
+    }
+    const selectedProvider = manualProviders.find((provider) => provider.id === manualProviderId);
+    if (!selectedProvider?.nit) {
+      setManualProviderProducts([]);
+      return;
+    }
+    loadManualProviderProducts(selectedProvider.nit);
+  }, [
+    activeTab,
+    manualProviderMode,
+    manualProviderId,
+    manualProviders,
+    dateRange.startDate,
+    dateRange.endDate
+  ]);
 
   const pieData = useMemo(() => {
     if (!providers.length) return [];
@@ -208,13 +297,170 @@ const Insights = () => {
   const annulledTotal = annulledData.total || 0;
   const annulledLimit = annulledData.limit || 20;
   const annulledPages = Math.max(Math.ceil(annulledTotal / annulledLimit), 1);
+  const addManualItem = (product) => {
+    const unitPrice = Number(product?.lastPrice ?? product?.priceAvg ?? 0);
+    setManualItems((items) => ([
+      ...items,
+      {
+        id: `item-${Date.now()}-${items.length}`,
+        code: product?.codigo || '',
+        description: product?.descripcion || '',
+        quantity: 1,
+        unitPrice: unitPrice || 0,
+        total: unitPrice ? Number(unitPrice.toFixed(2)) : 0
+      }
+    ]));
+  };
+
+  const updateManualItem = (itemId, field, value) => {
+    setManualItems((items) => items.map((item) => {
+      if (item.id !== itemId) return item;
+      const next = { ...item, [field]: value };
+      const quantity = Number(next.quantity) || 0;
+      const unitPrice = Number(next.unitPrice) || 0;
+      if (field === 'quantity' || field === 'unitPrice') {
+        next.total = Number((quantity * unitPrice).toFixed(2));
+      }
+      return next;
+    }));
+  };
+
+  const removeManualItem = (itemId) => {
+    setManualItems((items) => items.filter((item) => item.id !== itemId));
+  };
+
+  const handleManualSubmit = async (event) => {
+    event.preventDefault();
+    setManualFeedback(null);
+
+    if (manualProviderMode === 'existing' && !manualProviderId) {
+      setManualFeedback({ type: 'error', message: 'Selecciona un proveedor.' });
+      return;
+    }
+
+    if (manualProviderMode === 'new') {
+      if (!manualProviderName.trim()) {
+        setManualFeedback({ type: 'error', message: 'Ingresa el nombre del proveedor.' });
+        return;
+      }
+      if (!manualProviderNit.trim()) {
+        setManualFeedback({ type: 'error', message: 'Ingresa el NIT del proveedor.' });
+        return;
+      }
+    }
+
+    if (!manualIssueDate) {
+      setManualFeedback({ type: 'error', message: 'Selecciona la fecha de emisión.' });
+      return;
+    }
+
+    if (!manualTotal || Number(manualTotal) <= 0) {
+      setManualFeedback({ type: 'error', message: 'Ingresa el total de la factura.' });
+      return;
+    }
+
+    const parseAmount = (value) => {
+      const numberValue = Number(value);
+      return Number.isFinite(numberValue) ? numberValue : 0;
+    };
+
+    const payload = {
+      documentType: manualDocumentType,
+      controlNumber: manualControlNumber || undefined,
+      issueDate: manualIssueDate,
+      totals: {
+        subTotal: parseAmount(manualSubTotal),
+        iva: parseAmount(manualIva),
+        total: parseAmount(manualTotal)
+      },
+      notes: manualNotes || undefined,
+      currency: manualCurrency || undefined,
+      items: manualItems
+        .filter((item) => item.description?.trim())
+        .map((item) => ({
+          code: item.code?.trim(),
+          description: item.description.trim(),
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice) || 0,
+          total: Number(item.total) || 0
+        }))
+    };
+
+    if (manualProviderMode === 'existing') {
+      payload.providerId = manualProviderId;
+    } else {
+      payload.providerName = manualProviderName.trim();
+      payload.providerNit = manualProviderNit.trim();
+      payload.providerCommercialName = manualProviderCommercialName.trim() || undefined;
+      payload.providerEmail = manualProviderEmail.trim() || undefined;
+    }
+
+    setManualSubmitting(true);
+    try {
+      await createManualTransaction(payload);
+      setManualFeedback({ type: 'success', message: 'Factura manual guardada.' });
+      setManualControlNumber('');
+      setManualSubTotal('');
+      setManualIva('');
+      setManualTotal('');
+      setManualNotes('');
+      setManualItems([]);
+      if (manualProviderMode === 'new') {
+        setManualProviderName('');
+        setManualProviderNit('');
+        setManualProviderCommercialName('');
+        setManualProviderEmail('');
+      }
+      await loadManualProviders();
+      loadStats(dateRange.startDate, dateRange.endDate);
+      loadProviders(dateRange.startDate, dateRange.endDate);
+      loadProducts(dateRange.startDate, dateRange.endDate, selectedProviderFilter);
+    } catch (err) {
+      setManualFeedback({ type: 'error', message: err?.message || 'No se pudo guardar la factura.' });
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  const resetManualForm = () => {
+    setManualProviderMode('existing');
+    setManualProviderId('');
+    setManualProviderName('');
+    setManualProviderNit('');
+    setManualProviderCommercialName('');
+    setManualProviderEmail('');
+    setManualDocumentType('Factura Física');
+    setManualControlNumber('');
+    setManualIssueDate(new Date().toISOString().slice(0, 10));
+    setManualCurrency('');
+    setManualSubTotal('');
+    setManualIva('');
+    setManualTotal('');
+    setManualNotes('');
+    setManualItems([]);
+    setManualFeedback(null);
+  };
+
+  const filteredManualProviderProducts = useMemo(() => {
+    const term = manualProductQuery.trim().toLowerCase();
+    if (!term) return manualProviderProducts;
+    return manualProviderProducts.filter((item) => {
+      const descMatch = item.descripcion?.toLowerCase().includes(term);
+      const codeMatch = item.codigo?.toLowerCase().includes(term);
+      return descMatch || codeMatch;
+    });
+  }, [manualProviderProducts, manualProductQuery]);
 
   return (
     <>
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Inteligencia de Datos</h1>
-          <p className="text-xs text-gray-400 font-medium mt-1">Análisis de gastos e IVA por rango de fechas.</p>
+        <div className="animate-in fade-in slide-in-from-top-4 duration-700">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="h-1 w-5 bg-blue-600 rounded-full"></div>
+            <span className="text-blue-600 font-bold text-[10px] uppercase tracking-[0.2em]">Insights</span>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900">Inteligencia de Datos</h1>
+          <p className="text-gray-400 mt-1 text-sm font-medium">Análisis de gastos e IVA por rango de fechas.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-100 rounded-xl px-2.5 py-1.5 shadow-sm">
@@ -243,7 +489,8 @@ const Insights = () => {
         {[
           { id: 'resumen', label: 'Resumen' },
           { id: 'proveedores', label: 'Proveedores' },
-          { id: 'productos', label: 'Productos' }
+          { id: 'productos', label: 'Productos' },
+          { id: 'manual', label: 'Carga manual' }
         ].map((tab) => (
           <button
             key={tab.id}
@@ -678,6 +925,435 @@ const Insights = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'manual' && (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-amber-50 via-white to-sky-50 p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.35em] text-slate-400 font-black">Factura Fisica</p>
+                <h2 className="text-2xl font-black text-slate-900 mt-2">Carga Manual de Facturas</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  Registra facturas sin JSON para que entren a Insights y al historial de proveedores.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm">
+                <Receipt size={18} className="text-slate-500" />
+                <span className="text-[11px] uppercase tracking-widest font-black text-slate-500">
+                  Entrada Manual
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <form onSubmit={handleManualSubmit} className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest">Proveedor</h3>
+                  <p className="text-xs text-slate-500 mt-1">Selecciona uno existente o crea un nuevo registro.</p>
+                </div>
+                <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualProviderMode('existing');
+                      setManualProviderName('');
+                      setManualProviderNit('');
+                      setManualProviderCommercialName('');
+                      setManualProviderEmail('');
+                    }}
+                    className={clsx(
+                      'px-3 py-1.5 text-[10px] font-black uppercase rounded-lg transition-all',
+                      manualProviderMode === 'existing'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    Existente
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualProviderMode('new');
+                      setManualProviderId('');
+                    }}
+                    className={clsx(
+                      'px-3 py-1.5 text-[10px] font-black uppercase rounded-lg transition-all',
+                      manualProviderMode === 'new'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                    )}
+                  >
+                    Nuevo
+                  </button>
+                </div>
+              </div>
+
+              {manualProviderMode === 'existing' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Proveedor</label>
+                    <select
+                      value={manualProviderId}
+                      onChange={(e) => setManualProviderId(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                      disabled={manualProvidersLoading}
+                    >
+                      <option value="">Selecciona un proveedor</option>
+                      {manualProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.name} {provider.nit ? `• ${provider.nit}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {manualProvidersLoading && (
+                      <p className="text-[10px] text-slate-400 mt-1">Cargando proveedores...</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Nombre legal</label>
+                    <input
+                      type="text"
+                      value={manualProviderName}
+                      onChange={(e) => setManualProviderName(e.target.value)}
+                      placeholder="Proveedor S.A. de C.V."
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">NIT</label>
+                    <input
+                      type="text"
+                      value={manualProviderNit}
+                      onChange={(e) => setManualProviderNit(e.target.value)}
+                      placeholder="0614-160610-104-7"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Nombre comercial</label>
+                    <input
+                      type="text"
+                      value={manualProviderCommercialName}
+                      onChange={(e) => setManualProviderCommercialName(e.target.value)}
+                      placeholder="Marca o fantasia"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Email contacto</label>
+                    <input
+                      type="email"
+                      value={manualProviderEmail}
+                      onChange={(e) => setManualProviderEmail(e.target.value)}
+                      placeholder="proveedor@email.com"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-slate-100 pt-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <PlusCircle size={16} className="text-slate-500" />
+                  <h3 className="text-sm font-black uppercase text-slate-400 tracking-widest">Factura</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Fecha de emision</label>
+                    <input
+                      type="date"
+                      value={manualIssueDate}
+                      onChange={(e) => setManualIssueDate(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Numero de control</label>
+                    <input
+                      type="text"
+                      value={manualControlNumber}
+                      onChange={(e) => setManualControlNumber(e.target.value)}
+                      placeholder="Opcional"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Tipo de documento</label>
+                    <input
+                      type="text"
+                      value={manualDocumentType}
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                      readOnly
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Subtotal</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={manualSubTotal}
+                      onChange={(e) => setManualSubTotal(e.target.value)}
+                      placeholder="0.00"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">IVA</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={manualIva}
+                      onChange={(e) => setManualIva(e.target.value)}
+                      placeholder="0.00"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-600">Total</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={manualTotal}
+                      onChange={(e) => setManualTotal(e.target.value)}
+                      placeholder="0.00"
+                      className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600">Moneda</label>
+                  <input
+                    type="text"
+                    value={manualCurrency}
+                    onChange={(e) => setManualCurrency(e.target.value)}
+                    placeholder="USD (opcional)"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                  />
+                </div>
+                <div className="border-t border-slate-100 pt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">Productos</h4>
+                      <p className="text-xs text-slate-500 mt-1">Opcional, pero mejora el analisis por item.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addManualItem()}
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-600 hover:border-blue-200 hover:text-blue-600 transition-all"
+                    >
+                      <PlusCircle size={14} />
+                      Agregar item
+                    </button>
+                  </div>
+
+                  {manualProviderMode === 'existing' && (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Productos registrados</p>
+                          <p className="text-xs text-slate-500 mt-1">Toca un producto para prellenar el item.</p>
+                        </div>
+                        <div className="w-full sm:w-56">
+                          <input
+                            type="text"
+                            value={manualProductQuery}
+                            onChange={(e) => setManualProductQuery(e.target.value)}
+                            placeholder="Buscar producto"
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        {manualProviderProductsLoading ? (
+                          <div className="text-xs text-slate-400">Cargando productos...</div>
+                        ) : filteredManualProviderProducts.length === 0 ? (
+                          <div className="text-xs text-slate-400">Sin productos registrados para este proveedor.</div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                            {filteredManualProviderProducts.slice(0, 12).map((product) => (
+                              <button
+                                key={`${product.codigo}-${product.descripcion}`}
+                                type="button"
+                                onClick={() => addManualItem(product)}
+                                className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:border-blue-200 hover:bg-blue-50 transition-all"
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-slate-700 truncate">{product.descripcion || 'Sin descripcion'}</p>
+                                  <p className="text-[10px] text-slate-400 truncate">{product.codigo || 'Sin codigo'}</p>
+                                </div>
+                                <span className="text-[10px] font-black uppercase text-blue-600">Agregar</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {manualItems.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 p-4 text-xs text-slate-400">
+                      No hay productos agregados.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {manualItems.map((item, index) => (
+                        <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3">
+                          <div className="md:col-span-2">
+                            <label className="text-[10px] font-bold text-slate-500">Codigo</label>
+                            <input
+                              type="text"
+                              value={item.code}
+                              onChange={(e) => updateManualItem(item.id, 'code', e.target.value)}
+                              placeholder="SKU"
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:ring-0"
+                            />
+                          </div>
+                          <div className="md:col-span-4">
+                            <label className="text-[10px] font-bold text-slate-500">Descripcion</label>
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => updateManualItem(item.id, 'description', e.target.value)}
+                              placeholder={`Producto ${index + 1}`}
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:ring-0"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="text-[10px] font-bold text-slate-500">Cantidad</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.quantity}
+                              onChange={(e) => updateManualItem(item.id, 'quantity', e.target.value)}
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:ring-0"
+                            />
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="text-[10px] font-bold text-slate-500">Precio unitario</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={(e) => updateManualItem(item.id, 'unitPrice', e.target.value)}
+                              className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:ring-0"
+                            />
+                          </div>
+                          <div className="md:col-span-2 flex items-end gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] font-bold text-slate-500">Total</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.total}
+                                onChange={(e) => updateManualItem(item.id, 'total', e.target.value)}
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-blue-500 focus:ring-0"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeManualItem(item.id)}
+                              className="h-10 w-10 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-red-500 hover:border-red-200 transition-all"
+                              title="Eliminar"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-600">Notas</label>
+                  <textarea
+                    value={manualNotes}
+                    onChange={(e) => setManualNotes(e.target.value)}
+                    placeholder="Referencia interna, comentario o detalle adicional."
+                    className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 focus:border-blue-500 focus:bg-white focus:ring-0 min-h-[110px]"
+                  />
+                </div>
+              </div>
+
+              {manualFeedback && (
+                <div className={clsx(
+                  'rounded-xl px-4 py-3 text-sm font-semibold flex items-center gap-2',
+                  manualFeedback.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                    : 'bg-red-50 text-red-700 border border-red-100'
+                )}>
+                  {manualFeedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+                  <span>{manualFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={manualSubmitting}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-black uppercase tracking-wider shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all disabled:opacity-60"
+                >
+                  {manualSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <PlusCircle size={14} />}
+                  Guardar factura
+                </button>
+                <button
+                  type="button"
+                  onClick={resetManualForm}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-500 text-xs font-black uppercase tracking-wider hover:border-slate-300 hover:text-slate-700 transition-all"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-4">
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+                <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-4">Checklist</h4>
+                <div className="space-y-3 text-xs text-slate-600">
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-emerald-400" />
+                    <p>Usa la fecha real del documento para no distorsionar los reportes.</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-sky-400" />
+                    <p>Agrega el numero de control si existe para deduplicacion.</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <div className="mt-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                    <p>El NIT ayuda a unir facturas manuales con futuras facturas DTE.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg shadow-slate-900/10">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-300">
+                  <ShieldAlert size={14} />
+                  Seguridad
+                </div>
+                <p className="text-sm mt-3 text-slate-200">
+                  Los datos manuales se guardan con trazabilidad. Podras verlos en Resumen, Proveedores y Productos.
+                </p>
+                <p className="text-xs mt-4 text-slate-400">
+                  Si el proveedor empieza a enviar JSON luego, Doria unificara por NIT automaticamente.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

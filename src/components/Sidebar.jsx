@@ -10,6 +10,7 @@ import {
   Mail,
   Search,
   TrendingUp,
+  Tag,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const Sidebar = ({ mobileOpen = false, onClose = () => { }, isCollapsed = false,
   const navItems = [
     { name: "Búsqueda", icon: LayoutDashboard, path: "/" },
     { name: "Insights", icon: TrendingUp, path: "/insights" },
+    { name: "Categorias", icon: Tag, path: "/categories" },
     { name: "Paquetes", icon: Package, path: "/packages" },
     { name: "Cuentas", icon: Mail, path: "/accounts" },
   ];

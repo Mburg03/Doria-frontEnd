@@ -46,6 +46,18 @@ export const fetchProducts = async (params) => {
   }
 };
 
+export const fetchProductsByProvider = async (params) => {
+  try {
+    const res = await api.get('/insights/products/provider', { params });
+    return {
+      range: res.data?.range || {},
+      items: res.data?.items || []
+    };
+  } catch (error) {
+    throw normalizeError(error, 'No se pudo cargar los productos del proveedor.', 'INSIGHTS_PRODUCTS_PROVIDER');
+  }
+};
+
 export const fetchAnnulled = async (params) => {
   try {
     const res = await api.get('/insights/annulled', { params });
