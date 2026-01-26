@@ -72,6 +72,20 @@ export const fetchAnnulled = async (params) => {
   }
 };
 
+export const fetchCreditNotes = async (params) => {
+  try {
+    const res = await api.get('/insights/credit-notes', { params });
+    return {
+      page: res.data?.page || 1,
+      limit: res.data?.limit || 20,
+      total: res.data?.total || 0,
+      items: res.data?.items || []
+    };
+  } catch (error) {
+    throw normalizeError(error, 'No se pudo cargar el listado de notas de crédito.', 'INSIGHTS_CREDIT_NOTES');
+  }
+};
+
 export const fetchProviderBundle = async (params) => {
   try {
     const [detailsRes, productsRes] = await Promise.all([

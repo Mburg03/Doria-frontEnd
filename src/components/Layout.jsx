@@ -3,10 +3,14 @@ import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import clsx from 'clsx';
+import { useAuth } from '../context/AuthContext';
+import OrganizationSetupModal from './modals/OrganizationSetupModal';
 
 const Layout = ({ children }) => {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const { user, refreshUser } = useAuth();
+    const needsOrgSetup = Boolean(user?.organization && !user.organization.isProfileComplete);
 
     return (
         <div className="min-h-screen bg-gray-50 flex">
@@ -32,6 +36,11 @@ const Layout = ({ children }) => {
                     {children || <Outlet />}
                 </main>
             </div>
+            <OrganizationSetupModal
+                isOpen={needsOrgSetup}
+                organization={user?.organization}
+                onComplete={refreshUser}
+            />
         </div>
     );
 };

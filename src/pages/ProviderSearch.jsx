@@ -4,7 +4,6 @@ import api from '../services/api';
 import { Calendar, CheckCircle, Download, Search, X, ShieldAlert, History, Mail } from 'lucide-react';
 import { getDefaultRange } from '../utils/dateRange';
 import { useGmailAuth } from '../hooks/useGmailAuth';
-import clsx from 'clsx';
 
 const ProviderSearch = () => {
   const { user } = useAuth();

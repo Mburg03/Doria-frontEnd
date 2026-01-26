@@ -48,6 +48,12 @@ export const AuthProvider = ({ children }) => {
         return userRes.data;
     };
 
+    const refreshUser = async () => {
+        const res = await api.get('/auth/me');
+        setUser(res.data);
+        return res.data;
+    };
+
     const logout = async () => {
         setLoggingOut(true);
         try {
@@ -63,7 +69,18 @@ export const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, loading, loggingOut, isAuthenticated: !!user }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                login,
+                register,
+                refreshUser,
+                logout,
+                loading,
+                loggingOut,
+                isAuthenticated: !!user
+            }}
+        >
             {children}
         </AuthContext.Provider>
     );
